@@ -1,0 +1,125 @@
+/* src/styles/global.css — GitHub-inspired design system */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
+
+/* ── CSS Variables ── */
+:root[data-theme="dark"], :root {
+  --bg:        #0d0f12;
+  --sidebar:   #111318;
+  --panel:     #161b22;
+  --panel-hov: #1c2230;
+  --border:    #21262d;
+  --border-lt: #30363d;
+  --text:      #e6edf3;
+  --text-md:   #8b949e;
+  --text-dim:  #484f58;
+  --accent:    #58a6ff;
+  --accent-bg: #58a6ff14;
+  --accent-lt: #79c0ff;
+  --green:     #3fb950;
+  --green-bg:  #3fb95014;
+  --amber:     #d29922;
+  --amber-bg:  #d2992214;
+  --red:       #f85149;
+  --red-bg:    #f8514914;
+  --blue:      #58a6ff;
+  --purple:    #bc8cff;
+  --shadow:    0 8px 32px rgba(0,0,0,.55);
+  --shadow-lg: 0 24px 64px rgba(0,0,0,.75);
+}
+
+:root[data-theme="light"] {
+  --bg:        #f6f8fa;
+  --sidebar:   #ffffff;
+  --panel:     #ffffff;
+  --panel-hov: #f6f8fa;
+  --border:    #d0d7de;
+  --border-lt: #c6cdd5;
+  --text:      #24292f;
+  --text-md:   #57606a;
+  --text-dim:  #8c959f;
+  --accent:    #0969da;
+  --accent-bg: #0969da0f;
+  --accent-lt: #0550ae;
+  --green:     #1a7f37;
+  --green-bg:  #1a7f3710;
+  --amber:     #9a6700;
+  --amber-bg:  #9a670010;
+  --red:       #cf222e;
+  --red-bg:    #cf222e10;
+  --blue:      #0969da;
+  --purple:    #8250df;
+  --shadow:    0 4px 16px rgba(0,0,0,.10);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,.16);
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  font-family: 'Geist', 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background .2s, color .2s;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar          { width: 4px; height: 4px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: var(--border-lt); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ── Form elements ── */
+input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.4); cursor: pointer; }
+select option { background: var(--panel); }
+button { font-family: inherit; }
+
+/* ── Animations ── */
+@keyframes fadeUp  { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:none } }
+@keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
+@keyframes slideIn { from { opacity:0; transform:translateX(-6px) } to { opacity:1; transform:none } }
+@keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.35} }
+@keyframes spin    { to { transform: rotate(360deg) } }
+
+.fade-up   { animation: fadeUp  .18s ease; }
+.fade-in   { animation: fadeIn  .15s ease; }
+.slide-in  { animation: slideIn .18s ease; }
+
+/* ── Modal ── */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.72);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+  animation: fadeIn .15s ease;
+}
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border-lt);
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: var(--shadow-lg);
+  animation: fadeUp .18s ease;
+}
+
+/* ── Tag chip ── */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 600; border-radius: 4px;
+  padding: 2px 7px; white-space: nowrap; border: 1px solid;
+  letter-spacing: .15px;
+}
+
+/* ── Upload progress ── */
+.upload-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.upload-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s; }
+
+/* ── Toast ── */
+.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--panel); border: 1px solid var(--border-lt); border-radius: 9px; padding: 10px 16px; max-width: 320px; box-shadow: var(--shadow-lg); animation: fadeUp .2s ease; display: flex; gap: 8px; align-items: center; }
+
+/* ── Utility ── */
+.tabular { font-variant-numeric: tabular-nums; }

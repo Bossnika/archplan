@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Each user owns their own data tree
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Project members can read messages across the project
+    // (owner's uid namespace — simplified for solo/small team use)
+    // For multi-user collaboration, extend this with a shared projects collection
+
+  }
+}
