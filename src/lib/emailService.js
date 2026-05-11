@@ -1,25 +1,35 @@
-// src/lib/emailService.js — notificări email via SendGrid (prin Firebase Functions)
-import { getFunctions, httpsCallable } from 'firebase/functions'
+// src/lib/emailService.js — notificări email via Cloudflare Worker + SendGrid
+// Client → Cloudflare Worker (workers/notify/) → SendGrid API
+//
+// Setează VITE_NOTIFY_WORKER_URL în Cloudflare Pages → Settings → Environment variables
+// cu URL-ul worker-ului deploiat (ex: https://archplan-notify.<cont>.workers.dev)
 
-const functions = getFunctions()
+import { getAuth } from 'firebase/auth'
 
-/**
- * Trimite email de notificare la @menționare.
- * Client → Firebase Cloud Function (functions/index.js) → SendGrid API
- *
- * @param {object} params
- * @param {string} params.toEmail      - emailul destinatarului
- * @param {string} params.toName       - numele destinatarului
- * @param {string} params.mentionedBy  - numele celui care a menționat
- * @param {string} params.projectName  - numele proiectului
- * @param {string} params.channel      - id-ul canalului (general/cu/avize/pt/ac)
- * @param {string} params.messageText  - textul mesajului
- * @param {string} params.projectId    - id-ul proiectului
- */
+const WORKER_URL = import.meta.env.VITE_NOTIFY_WORKER_URL
+
 export async function sendMentionEmail(params) {
+  if (!WORKER_URL) return
+
   try {
-    const notify = httpsCallable(functions, 'notifyMention')
-    await notify(params)
+    const user = getAuth().currentUser
+    if (!user) return
+
+    const token = await user.getIdToken()
+
+    const res = await fetch(WORKER_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(params),
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error ?? `HTTP ${res.status}`)
+    }
   } catch (err) {
     // Non-blocking — chat-ul funcționează și fără email
     console.warn('Email mention notification failed (non-critical):', err.message)

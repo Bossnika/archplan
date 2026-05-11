@@ -1,0 +1,10 @@
+name = "archplan-notify"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+APP_URL = "https://app.studiokolectiv.ro"
+FIREBASE_PROJECT_ID = "archplan-kolectiv"
+
+# Secrets (set via CLI — never commit these):
+#   wrangler secret put SENDGRID_API_KEY
