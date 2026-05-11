@@ -7,6 +7,10 @@ import {
   AtSign, Hash, Users, UserPlus, Trash2, CheckSquare, Zap, Flame,
   Droplets, Radio, Leaf, ChevronDown
 } from "lucide-react";
+import { useAuth } from './hooks/useAuth.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg } from './lib/db.js'
+import { sendMentionEmail } from './lib/emailService.js'
 
 /* ─── THEME ─────────────────────────────────────────────────────────────────── */
 const DARK = {
@@ -94,7 +98,7 @@ const makeMsgs = (channel) => {
 
 /* ─── HELPERS ────────────────────────────────────────────────────────────────── */
 const uid   = () => Math.random().toString(36).slice(2,8);
-const TODAY = "2025-01-05";
+const TODAY = new Date().toISOString().slice(0,10);
 const diffD = (a,b)=>Math.round((new Date(b)-new Date(a))/86400000);
 const fmt   = d=>d?new Date(d).toLocaleDateString("ro-RO",{day:"2-digit",month:"short",year:"numeric"}):"—";
 const fmtS  = d=>d?new Date(d).toLocaleDateString("ro-RO",{day:"2-digit",month:"short"}):"—";
@@ -258,10 +262,7 @@ const MultiProg=({phases,T})=>{
 /* ─── CHAT COMPONENT ─────────────────────────────────────────────────────────── */
 const Chat=({project,T,currentUser,showToast})=>{
   const [channel,   setChannel]   = useState("general");
-  const [messages,  setMessages]  = useState(()=>makeMsgs("general"));
-  const [allMsgs,   setAllMsgs]   = useState(()=>{
-    const m={};CHANNELS.forEach(c=>{m[c.id]=makeMsgs(c.id);});return m;
-  });
+  const [messages,  setMessages]  = useState([]);
   const [text,      setText]      = useState("");
   const [mentionQ,  setMentionQ]  = useState(null);
   const [mentionPos,setMentionPos]= useState(0);
@@ -274,12 +275,21 @@ const Chat=({project,T,currentUser,showToast})=>{
   const [newMemEmail,setNewMemEmail]=useState("");
   const [showNewMem,setShowNewMem]= useState(false);
   const [members,   setMembers]   = useState(project.members||[]);
+  const { user } = useAuth();
   const bottomRef = useRef();
   const inputRef  = useRef();
 
   useEffect(()=>{
-    setMessages(allMsgs[channel]||[]);
-  },[channel]);
+    setMembers(project.members||[]);
+  },[project.members]);
+
+  useEffect(()=>{
+    if (!user) return;
+    const unsub = listenMessages(user.uid, project.id, channel, (msgs)=>{
+      setMessages(msgs.map(m=>({...m, ts: m.createdAt?.toDate?.() ?? m.ts})));
+    });
+    return unsub;
+  },[user, project.id, channel]);
 
   useEffect(()=>{
     bottomRef.current?.scrollIntoView({behavior:"smooth"});
@@ -303,24 +313,27 @@ const Chat=({project,T,currentUser,showToast})=>{
 
   const handleSend=()=>{
     if(!text.trim()&&!pendingAtt.length) return;
-    const msg={
-      id:uid(),uid:currentUser.id,displayName:currentUser.name,
-      text:text.trim(),attachments:[...pendingAtt],ts:new Date(),
-    };
-    const updated={...allMsgs,[channel]:[...(allMsgs[channel]||[]),msg]};
-    setAllMsgs(updated);setMessages(updated[channel]);
-    // Simulate email on @mention
+    if(!user) return;
+    dbSendMsg(user.uid, project.id, channel, {
+      uid: currentUser.id,
+      displayName: currentUser.name,
+      text: text.trim(),
+      attachments: [...pendingAtt],
+    });
     const mentioned=[...new Set((text.match(/@([\w][\w\s]*)/g)||[]).map(m=>m.slice(1).trim()))];
     mentioned.forEach(name=>{
       const m=members.find(mb=>mb.name.toLowerCase()===name.toLowerCase());
-      if(m&&m.id!==currentUser.id) showToast(`📧 Email trimis la ${m.email} — @menționare`,T.green);
+      if(m&&m.email!==currentUser.email){
+        sendMentionEmail({toEmail:m.email,toName:m.name,mentionedBy:currentUser.name,projectName:project.name,channel,messageText:text.trim(),projectId:project.id});
+        showToast(`📧 Email trimis la ${m.email} — @menționare`,T.green);
+      }
     });
     setText("");setPendingAtt([]);
   };
 
   const deleteMsg=(msgId)=>{
-    const updated={...allMsgs,[channel]:allMsgs[channel].filter(m=>m.id!==msgId)};
-    setAllMsgs(updated);setMessages(updated[channel]);
+    if(!user) return;
+    dbDeleteMsg(user.uid, project.id, channel, msgId);
   };
 
   const addExtLink=()=>{
@@ -330,8 +343,11 @@ const Chat=({project,T,currentUser,showToast})=>{
   };
 
   const addMember=()=>{
-    if(!newMemName.trim()||!newMemEmail.trim()) return;
-    setMembers(m=>[...m,{id:uid(),name:newMemName.trim(),email:newMemEmail.trim(),role:"member"}]);
+    if(!newMemName.trim()||!newMemEmail.trim()||!user) return;
+    const newMem={id:uid(),name:newMemName.trim(),email:newMemEmail.trim(),role:"member"};
+    const updatedMems=[...members,newMem];
+    setMembers(updatedMems);
+    updateProject(user.uid, project.id, {members:updatedMems});
     setNewMemName("");setNewMemEmail("");setShowNewMem(false);
     showToast(`👤 ${newMemName} adăugat în proiect`,T.green);
   };
@@ -719,20 +735,37 @@ const TABS=[
 
 /* ─── MAIN APP ───────────────────────────────────────────────────────────────── */
 export default function App(){
+  const { user, loading, logout } = useAuth();
   const [themeMode,setThemeMode]=useState("dark");
   const sysDark=window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   const T=themeMode==="dark"||(themeMode==="auto"&&sysDark)?DARK:LIGHT;
 
-  const CURRENT_USER=MEMBERS[0]; // Ion Popescu = logged-in user
+  const CURRENT_USER = user ? {
+    id: user.uid,
+    name: user.displayName || user.email.split('@')[0],
+    email: user.email,
+    role: 'owner',
+  } : null;
 
-  const [projects,setProjects]=useState(INIT_PROJECTS);
-  const [selId,setSelId]=useState("p1");
+  const [projects,setProjects]=useState([]);
+  const [selId,setSelId]=useState(null);
   const [tab,setTab]=useState("faze");
   const [showRem,setShowRem]=useState(false);
   const [search,setSearch]=useState("");
   const [coll,setColl]=useState(false);
   const [toast,setToast]=useState(null);
   const [uMenu,setUMenu]=useState(false);
+  const [showNewProj,setShowNewProj]=useState(false);
+  const [newProjName,setNewProjName]=useState("");
+  const [newProjClient,setNewProjClient]=useState("");
+  const [newProjLoc,setNewProjLoc]=useState("");
+  const [newProjStart,setNewProjStart]=useState(TODAY);
+
+  useEffect(()=>{
+    if(!user) return;
+    const unsub=listenProjects(user.uid, setProjects);
+    return unsub;
+  },[user]);
 
   const showToast=useCallback((msg,c)=>{setToast({msg,c:c||T.green});setTimeout(()=>setToast(null),3500);},[T]);
 
@@ -740,8 +773,39 @@ export default function App(){
   const filt=projects.filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase())||(p.client||"").toLowerCase().includes(search.toLowerCase()));
   const alerts=projects.flatMap(p=>(p.phases||[]).filter(ph=>ph.status!=="approved"&&ph.status!=="rejected"&&diffD(TODAY,ph.endDate)>=0&&diffD(TODAY,ph.endDate)<=7).map(ph=>({pn:p.name,ph:ph.name,d:diffD(TODAY,ph.endDate)})));
 
-  const updPhase=(projId,phId,data)=>setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,phases:p.phases.map(ph=>ph.phaseId!==phId?ph:{...ph,...data})}));
-  const updAviz=(projId,avId,data)=>setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,avize:p.avize.map(av=>av.avizId!==avId?av:{...av,...data})}));
+  const updPhase=(projId,phId,data)=>{
+    const proj=projects.find(p=>p.id===projId);
+    if(!proj||!user) return;
+    const newPhases=(proj.phases||[]).map(ph=>ph.phaseId!==phId?ph:{...ph,...data});
+    setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,phases:newPhases}));
+    updateProject(user.uid,projId,{phases:newPhases});
+  };
+  const updAviz=(projId,avId,data)=>{
+    const proj=projects.find(p=>p.id===projId);
+    if(!proj||!user) return;
+    const newAvize=(proj.avize||[]).map(av=>av.avizId!==avId?av:{...av,...data});
+    setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,avize:newAvize}));
+    updateProject(user.uid,projId,{avize:newAvize});
+  };
+
+  const handleNewProject=async()=>{
+    if(!newProjName.trim()||!user) return;
+    const start=newProjStart||TODAY;
+    const newProj={
+      name:newProjName.trim(),
+      client:newProjClient.trim(),
+      location:newProjLoc.trim(),
+      startDate:start,
+      phases:mkPhases(start,Array(10).fill("pending")),
+      avize:mkAvize(start),
+      members:[{id:user.uid,name:CURRENT_USER.name,email:CURRENT_USER.email,role:"owner"}],
+      acAttachments:[],
+    };
+    await createProject(user.uid,newProj);
+    setNewProjName("");setNewProjClient("");setNewProjLoc("");setNewProjStart(TODAY);
+    setShowNewProj(false);
+    showToast(`Proiect "${newProj.name}" creat`,T.green);
+  };
 
   const themeIcon=themeMode==="dark"?<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>:themeMode==="light"?<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>:<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>;
 
@@ -761,6 +825,14 @@ export default function App(){
     .fade-in{animation:fadeIn .15s ease;}
     textarea{scrollbar-width:thin;}
   `;
+
+  if(loading) return(
+    <div style={{minHeight:"100vh",background:DARK.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:DARK.textDim,fontSize:13}}>Se încarcă…</div>
+    </div>
+  );
+
+  if(!user) return <LoginPage />;
 
   return(
     <div style={{fontFamily:"'Geist','Helvetica Neue',sans-serif",background:T.bg,height:"100vh",color:T.text,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -789,7 +861,7 @@ export default function App(){
         <button onClick={()=>setThemeMode(m=>m==="dark"?"light":m==="light"?"auto":"dark")}
           style={{display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid ${T.border}`,borderRadius:7,width:32,height:32,color:T.textMd,cursor:"pointer"}}
           title={`Temă: ${themeMode}`}>{themeIcon}</button>
-        <button style={{display:"flex",alignItems:"center",gap:5,background:T.accent,border:"none",borderRadius:7,padding:"6px 13px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>
+        <button onClick={()=>setShowNewProj(true)} style={{display:"flex",alignItems:"center",gap:5,background:T.accent,border:"none",borderRadius:7,padding:"6px 13px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>
           <Plus size={13}/>Proiect nou
         </button>
         {/* User avatar */}
@@ -806,7 +878,7 @@ export default function App(){
                   <div style={{fontSize:10,color:T.textDim}}>{CURRENT_USER.email}</div>
                 </div>
               </div>
-              <button onClick={()=>setUMenu(false)} style={{width:"100%",background:"transparent",border:"none",padding:"7px 12px",color:T.red,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:6,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
+              <button onClick={()=>{setUMenu(false);logout();}} style={{width:"100%",background:"transparent",border:"none",padding:"7px 12px",color:T.red,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:6,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
                 <LogOut size={13}/>Deconectare
               </button>
             </div>
@@ -871,7 +943,6 @@ export default function App(){
           </div>
           {!coll&&<div style={{padding:"8px 14px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6}}>
             <Calendar size={11} color={T.textDim}/><span style={{fontSize:10,color:T.textDim}}>{fmt(TODAY)}</span>
-            <span style={{marginLeft:"auto",fontSize:9,color:T.textDim,background:T.border,borderRadius:3,padding:"1px 5px"}}>DEMO</span>
           </div>}
         </aside>
 
@@ -990,6 +1061,35 @@ export default function App(){
           <span style={{fontSize:10,color:T.textDim}}>© 2025 ArchPlan</span>
         </div>
       </footer>
+
+      {/* Modal proiect nou */}
+      {showNewProj&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}} onClick={()=>setShowNewProj(false)}>
+          <div style={{background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:14,padding:28,width:420,boxShadow:T.shadowLg}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:18}}>Proiect nou</div>
+            {[
+              ["Nume proiect *","text",newProjName,setNewProjName,"ex: Locuință P+1E — Cluj"],
+              ["Client","text",newProjClient,setNewProjClient,"ex: Familia Ionescu"],
+              ["Locație","text",newProjLoc,setNewProjLoc,"ex: Cluj-Napoca, str. Memorandumului"],
+            ].map(([label,type,val,set,ph])=>(
+              <div key={label} style={{marginBottom:12}}>
+                <div style={{fontSize:10,color:T.textDim,marginBottom:4,textTransform:"uppercase",letterSpacing:.6}}>{label}</div>
+                <input type={type} value={val} onChange={e=>set(e.target.value)} placeholder={ph}
+                  style={{width:"100%",background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:"8px 11px",color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+            ))}
+            <div style={{marginBottom:18}}>
+              <div style={{fontSize:10,color:T.textDim,marginBottom:4,textTransform:"uppercase",letterSpacing:.6}}>Dată start</div>
+              <input type="date" value={newProjStart} onChange={e=>setNewProjStart(e.target.value)}
+                style={{width:"100%",background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:"8px 11px",color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button onClick={()=>setShowNewProj(false)} style={{background:"transparent",border:`1px solid ${T.border}`,borderRadius:7,padding:"7px 16px",color:T.textMd,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Anulează</button>
+              <button onClick={handleNewProject} style={{background:T.accent,border:"none",borderRadius:7,padding:"7px 18px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Creează</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast&&(
