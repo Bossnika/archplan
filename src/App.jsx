@@ -1,31 +1,1003 @@
-import React, { useState } from 'react'
-import { Sun, Moon } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Bell, Plus, Search, ChevronRight, AlertTriangle, CheckCircle, Clock,
+  Circle, FileText, AlertCircle, Layers, Building2, BarChart2, User,
+  Download, Upload, Link2, ExternalLink, X, Calendar, Map, Settings,
+  PanelLeftClose, PanelLeftOpen, LogOut, MessageSquare, Send, Paperclip,
+  AtSign, Hash, Users, UserPlus, Trash2, CheckSquare, Zap, Flame,
+  Droplets, Radio, Leaf, ChevronDown
+} from "lucide-react";
 
-const T = {
-  bg:'#0d0f12', sidebar:'#111318', panel:'#161b22',
-  border:'#21262d', text:'#e6edf3', textDim:'#484f58',
-  accent:'#58a6ff', green:'#3fb950', amber:'#d29922', red:'#f85149',
-}
+/* ─── THEME ─────────────────────────────────────────────────────────────────── */
+const DARK = {
+  bg:"#0d0f12",sidebar:"#111318",panel:"#161b22",panelHov:"#1c2230",
+  border:"#21262d",borderLt:"#30363d",
+  text:"#e6edf3",textMd:"#8b949e",textDim:"#484f58",
+  accent:"#58a6ff",accentBg:"#58a6ff14",accentLt:"#79c0ff",
+  green:"#3fb950",greenBg:"#3fb95014",
+  amber:"#d29922",amberBg:"#d2992214",
+  red:"#f85149",redBg:"#f8514914",
+  blue:"#58a6ff",purple:"#bc8cff",
+  shadow:"0 8px 32px rgba(0,0,0,.55)",shadowLg:"0 24px 64px rgba(0,0,0,.75)",
+};
+const LIGHT = {
+  bg:"#f6f8fa",sidebar:"#ffffff",panel:"#ffffff",panelHov:"#f6f8fa",
+  border:"#d0d7de",borderLt:"#c6cdd5",
+  text:"#24292f",textMd:"#57606a",textDim:"#8c959f",
+  accent:"#0969da",accentBg:"#0969da0f",accentLt:"#0550ae",
+  green:"#1a7f37",greenBg:"#1a7f3710",
+  amber:"#9a6700",amberBg:"#9a670010",
+  red:"#cf222e",redBg:"#cf222e10",
+  blue:"#0969da",purple:"#8250df",
+  shadow:"0 4px 16px rgba(0,0,0,.10)",shadowLg:"0 16px 48px rgba(0,0,0,.16)",
+};
 
-export default function App() {
-  const [dark, setDark] = useState(true)
-  const theme = dark ? T : { ...T, bg:'#f6f8fa', sidebar:'#fff', panel:'#fff', border:'#d0d7de', text:'#24292f', textDim:'#8c959f' }
+/* ─── CONSTANTS ─────────────────────────────────────────────────────────────── */
+const GC = {CU:"#d29922",Avize:"#58a6ff",PT:"#bc8cff",AC:"#3fb950"};
+const STATUS_META = {
+  pending:    {label:"De făcut",   Icon:Circle,      color:"#484f58"},
+  in_progress:{label:"În lucru",   Icon:Clock,       color:"#d29922"},
+  submitted:  {label:"Depus",      Icon:FileText,    color:"#58a6ff"},
+  approved:   {label:"Finalizat",  Icon:CheckCircle, color:"#3fb950"},
+  rejected:   {label:"Respins",    Icon:AlertCircle, color:"#f85149"},
+};
+const CHANNELS = [
+  {id:"general",label:"General",   Icon:MessageSquare},
+  {id:"cu",     label:"CU",        Icon:FileText},
+  {id:"avize",  label:"Avize",     Icon:Building2},
+  {id:"pt",     label:"PT",        Icon:Layers},
+  {id:"ac",     label:"Dosar AC",  Icon:CheckCircle},
+];
+const AVATAR_COLORS = [
+  "#58a6ff","#3fb950","#d29922","#bc8cff","#f0883e",
+  "#39d353","#ff7b72","#79c0ff","#ffa657","#56d364",
+];
+const INST = [
+  {id:"electrica",name:"Electrica / E.ON / CEZ",  short:"Electrică", Icon:Zap,      color:"#d29922"},
+  {id:"gaz",      name:"Distrigaz / E.ON Gaz",    short:"Gaz",       Icon:Flame,    color:"#f0883e"},
+  {id:"apa",      name:"Apă-Canal (RAJAC)",        short:"Apă-Canal", Icon:Droplets, color:"#58a6ff"},
+  {id:"telecom",  name:"Telecom",                  short:"Telecom",   Icon:Radio,    color:"#bc8cff"},
+  {id:"mediu",    name:"APM — Mediu",              short:"Mediu",     Icon:Leaf,     color:"#3fb950"},
+  {id:"drumuri",  name:"DRDP / Drumuri",           short:"Drumuri",   Icon:Map,      color:"#8b949e"},
+];
 
-  return (
-    <div style={{ background: theme.bg, minHeight: '100vh', color: theme.text, fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-      <div style={{ background: theme.panel, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 40, textAlign: 'center', maxWidth: 500 }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>📐</div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>ArchPlan</h1>
-        <p style={{ color: theme.textDim, marginBottom: 20 }}>Studio Office Kolectiv — Project Manager</p>
-        <div style={{ background: `${theme.green}18`, border: `1px solid ${theme.green}44`, borderRadius: 10, padding: 16, color: theme.green, fontSize: 14 }}>
-          ✅ Aplicația este live pe internet!<br/>
-          Adresa: archplan.vercel.app
+/* ─── DEMO MEMBERS ───────────────────────────────────────────────────────────── */
+const MEMBERS = [
+  {id:"m1", name:"Ion Popescu",    email:"ion@studiokolectiv.ro",   role:"owner"},
+  {id:"m2", name:"Maria Ionescu",  email:"maria@studiokolectiv.ro", role:"member"},
+  {id:"m3", name:"Alexandru Mureșan", email:"alex.muresan@gmail.com", role:"member"},
+  {id:"m4", name:"Oana Silaghi",   email:"oana@studiokolectiv.ro",  role:"member"},
+];
+
+/* ─── DEMO MESSAGES (per channel) ───────────────────────────────────────────── */
+const makeMsgs = (channel) => {
+  const base = {
+    general: [
+      {id:"g1",uid:"m1",text:"Am încărcat documentația CU finalizată. Vă rog să verificați.",attachments:[{id:"a1",name:"Documentatie_CU_v2.pdf",url:"#"}],ts:new Date("2025-01-05T09:15:00")},
+      {id:"g2",uid:"m2",text:"Am verificat, arată bine! @Ion Popescu poți să depui la primărie azi?",attachments:[],ts:new Date("2025-01-05T09:32:00")},
+      {id:"g3",uid:"m1",text:"Da, mă duc după-amiaza. @Alexandru Mureșan ai trimis planșele actualizate?",attachments:[],ts:new Date("2025-01-05T09:45:00")},
+      {id:"g4",uid:"m3",text:"Da, linkul la Drive: https://drive.google.com/folder/floresti",attachments:[{id:"a2",name:"Planșe_PT_v3 — Drive",url:"https://drive.google.com",external:true}],ts:new Date("2025-01-05T10:02:00")},
+      {id:"g5",uid:"m4",text:"Am primit avizul de la APM! 🟢 Îl urc în secțiunea Avize.",attachments:[{id:"a3",name:"Aviz_APM_CJ204.pdf",url:"#"}],ts:new Date("2025-01-05T11:20:00")},
+    ],
+    avize: [
+      {id:"av1",uid:"m2",text:"Status avize actualizat: Electrică ✓, Gaz ✓, Apă-Canal în așteptare.",attachments:[],ts:new Date("2025-01-04T14:10:00")},
+      {id:"av2",uid:"m3",text:"@Maria Ionescu am sunat la RAJAC, cer documentație suplimentară geotehnică.",attachments:[],ts:new Date("2025-01-04T15:30:00")},
+      {id:"av3",uid:"m1",text:"Ok, trimiteți studiul geotehnic cât mai repede. @Alexandru Mureșan poți coordona?",attachments:[],ts:new Date("2025-01-05T08:00:00")},
+    ],
+    cu:[
+      {id:"cu1",uid:"m1",text:"CU nr. 142/2024 a fost emis! Data de azi.",attachments:[{id:"a4",name:"CU_142_2024.pdf",url:"#"}],ts:new Date("2024-10-20T13:00:00")},
+    ],
+    pt:[],ac:[],
+  };
+  return (base[channel]||[]).map(m=>({...m,displayName:MEMBERS.find(mb=>mb.id===m.uid)?.name||"?"}));
+};
+
+/* ─── HELPERS ────────────────────────────────────────────────────────────────── */
+const uid   = () => Math.random().toString(36).slice(2,8);
+const TODAY = "2025-01-05";
+const diffD = (a,b)=>Math.round((new Date(b)-new Date(a))/86400000);
+const fmt   = d=>d?new Date(d).toLocaleDateString("ro-RO",{day:"2-digit",month:"short",year:"numeric"}):"—";
+const fmtS  = d=>d?new Date(d).toLocaleDateString("ro-RO",{day:"2-digit",month:"short"}):"—";
+const fmtT  = d=>d instanceof Date?d.toLocaleTimeString("ro-RO",{hour:"2-digit",minute:"2-digit"}):"—";
+const pctOf = phases=>phases.length?Math.round(phases.filter(p=>p.status==="approved").length/phases.length*100):0;
+
+const avatarColor = (str="")=>AVATAR_COLORS[str.split("").reduce((a,c)=>a+c.charCodeAt(0),0)%AVATAR_COLORS.length];
+
+/* ─── DEMO PROJECTS ──────────────────────────────────────────────────────────── */
+const mkPhases=(start,statuses)=>{
+  const tpl=[
+    {id:"cu_doc",  name:"Elaborare documentație CU",   group:"CU",   dur:14},
+    {id:"cu_dep",  name:"Depunere cerere CU",          group:"CU",   dur:3},
+    {id:"cu_emit", name:"Emitere CU",                  group:"CU",   dur:30},
+    {id:"av_doc",  name:"Elaborare documentații avize",group:"Avize",dur:21},
+    {id:"av_dep",  name:"Depunere avize instituții",   group:"Avize",dur:7},
+    {id:"av_obt",  name:"Obținere avize",              group:"Avize",dur:45},
+    {id:"pt_doc",  name:"Elaborare PT",                group:"PT",   dur:30},
+    {id:"pt_ver",  name:"Verificare proiect",          group:"PT",   dur:14},
+    {id:"ac_dep",  name:"Depunere dosar AC",           group:"AC",   dur:5},
+    {id:"ac_emit", name:"Emitere AC",                  group:"AC",   dur:30},
+  ];
+  let cur=new Date(start);
+  return tpl.map((t,i)=>{
+    const s=cur.toISOString().slice(0,10);
+    cur=new Date(cur.getTime()+t.dur*86400000);
+    return{...t,phaseId:`ph_${t.id}`,status:statuses[i]||"pending",startDate:s,endDate:cur.toISOString().slice(0,10),attachments:[]};
+  });
+};
+const mkAvize=(start,sts={})=>INST.map(inst=>({
+  instId:inst.id,avizId:`av_${inst.id}`,status:sts[inst.id]||"pending",
+  dosarNr:sts[inst.id]==="approved"?`${inst.short.slice(0,3).toUpperCase()}-2024-${Math.floor(Math.random()*900+100)}`:"",
+  contactName:"",note:"",attachments:[],
+  steps:inst.Icon?[
+    {stepId:uid(),name:`Solicitare aviz ${inst.short.toLowerCase()}`,status:["approved","in_progress","submitted"].includes(sts[inst.id])?"approved":"pending",date:start},
+    {stepId:uid(),name:"Depunere documentație",status:sts[inst.id]==="approved"?"approved":"pending",date:new Date(new Date(start).getTime()+14*86400000).toISOString().slice(0,10)},
+    {stepId:uid(),name:`Obținere aviz`,status:sts[inst.id]==="approved"?"approved":"pending",date:new Date(new Date(start).getTime()+28*86400000).toISOString().slice(0,10)},
+  ]:[],
+}));
+
+const INIT_PROJECTS=[
+  {id:"p1",name:"Locuință P+1E — Florești",client:"Familia Mureșan Alexandru",location:"Florești, jud. Cluj",startDate:"2024-09-01",
+    phases:mkPhases("2024-09-01",["approved","approved","approved","approved","approved","in_progress","pending","pending","pending","pending"]),
+    avize:mkAvize("2024-11-20",{electrica:"approved",gaz:"approved",apa:"in_progress",telecom:"submitted",mediu:"approved",drumuri:"pending"}),
+    members:[...MEMBERS],acAttachments:[]},
+  {id:"p2",name:"Sediu firmă S+P+2E — Cluj",client:"SC Tehno Construct SRL",location:"Cluj-Napoca, Calea Turzii",startDate:"2024-11-15",
+    phases:mkPhases("2024-11-15",["approved","approved","in_progress","pending","pending","pending","pending","pending","pending","pending"]),
+    avize:mkAvize("2025-01-26",{}),
+    members:[MEMBERS[0],MEMBERS[1]],acAttachments:[]},
+  {id:"p3",name:"Amenajare mansardă — Turda",client:"Familia Oana Silaghi",location:"Turda, str. Avram Iancu",startDate:"2025-01-10",
+    phases:mkPhases("2025-01-10",["in_progress","pending","pending","pending","pending","pending","pending","pending","pending","pending"]),
+    avize:mkAvize("2025-03-23",{}),
+    members:[MEMBERS[0],MEMBERS[3]],acAttachments:[]},
+];
+
+/* ─── MICRO ATOMS ────────────────────────────────────────────────────────────── */
+const Avatar=({name="?",email="",size=28,style={}})=>{
+  const initials=name.trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join("");
+  const bg=avatarColor(email||name);
+  return(
+    <div style={{width:size,height:size,borderRadius:"50%",background:bg,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.36,fontWeight:700,flexShrink:0,letterSpacing:"-.5px",userSelect:"none",border:`2px solid ${bg}55`,...style}}>
+      {initials||"?"}
+    </div>
+  );
+};
+
+const Chip=({label,color,T})=>(
+  <span style={{fontSize:10,fontWeight:600,color,background:`${color}18`,border:`1px solid ${color}30`,borderRadius:4,padding:"1px 7px",whiteSpace:"nowrap",letterSpacing:.2}}>{label}</span>
+);
+
+const MiniProg=({val,color,w=56,T})=>(
+  <div style={{display:"flex",alignItems:"center",gap:6}}>
+    <div style={{width:w,height:3,background:T.border,borderRadius:2,overflow:"hidden"}}>
+      <div style={{height:"100%",width:`${val}%`,background:color,borderRadius:2,transition:"width .5s"}}/>
+    </div>
+    <span style={{fontSize:11,color:T.textMd,fontWeight:600,minWidth:26}}>{val}%</span>
+  </div>
+);
+
+const StatusDot=({status})=>{
+  const s=STATUS_META[status]||STATUS_META.pending;
+  return <s.Icon size={11} color={s.color}/>;
+};
+
+/* ─── MESSAGE TEXT with @mention highlight ───────────────────────────────────── */
+const MsgText=({text,T})=>{
+  const parts=text.split(/(@[\w][\w\s]*?)(?=\s@|\s[^@]|$)/g);
+  return(
+    <span>
+      {parts.map((p,i)=>p.startsWith("@")
+        ?<span key={i} style={{color:T.accent,fontWeight:600,background:`${T.accent}18`,borderRadius:3,padding:"0 3px"}}>{p}</span>
+        :<span key={i}>{p}</span>
+      )}
+    </span>
+  );
+};
+/* ─── GANTT ──────────────────────────────────────────────────────────────────── */
+const Gantt=({phases,T})=>{
+  const total=Math.max(1,diffD(phases[0].startDate,phases[phases.length-1].endDate));
+  const tp=Math.min(100,Math.max(0,diffD(phases[0].startDate,TODAY)/total*100));
+  return(
+    <div style={{overflowX:"auto"}}>
+      <div style={{minWidth:540}}>
+        <div style={{display:"flex",paddingLeft:188,marginBottom:8}}>
+          <span style={{fontSize:10,color:T.textDim,flex:1}}>{fmt(phases[0].startDate)}</span>
+          <span style={{fontSize:10,color:T.textDim}}>{fmt(phases[phases.length-1].endDate)}</span>
         </div>
-        <button onClick={() => setDark(d => !d)}
-          style={{ marginTop: 20, background: theme.accent, border: 'none', borderRadius: 8, padding: '10px 20px', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-          {dark ? '☀️ Light mode' : '🌙 Dark mode'}
-        </button>
+        {phases.map(ph=>{
+          const l=diffD(phases[0].startDate,ph.startDate)/total*100;
+          const w=Math.max(.8,diffD(ph.startDate,ph.endDate)/total*100);
+          const c=GC[ph.group]||T.accent;
+          return(
+            <div key={ph.phaseId} style={{display:"flex",alignItems:"center",marginBottom:5}}>
+              <div style={{width:188,flexShrink:0,paddingRight:10}}>
+                <div style={{fontSize:11,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ph.name}</div>
+                <Chip label={ph.group} color={c} T={T}/>
+              </div>
+              <div style={{flex:1,height:20,background:T.border,borderRadius:3,position:"relative",overflow:"hidden"}}>
+                <div style={{position:"absolute",left:`${l}%`,width:`${w}%`,height:"100%",background:ph.status==="approved"?c:`${c}44`,border:`1px solid ${c}66`,borderRadius:3}}/>
+                <div style={{position:"absolute",left:`${tp}%`,top:0,bottom:0,width:1.5,background:T.red,zIndex:2}}/>
+              </div>
+              <div style={{width:44,textAlign:"right",fontSize:10,color:ph.status==="approved"?T.green:T.textDim,paddingLeft:8}}>
+                {ph.status==="approved"?<CheckCircle size={11} color={T.green}/>:fmtS(ph.endDate)}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
-  )
+  );
+};
+
+/* ─── MULTI PROGRESS ─────────────────────────────────────────────────────────── */
+const MultiProg=({phases,T})=>{
+  const groups=["CU","Avize","PT","AC"];
+  const pct=pctOf(phases);
+  return(
+    <div style={{display:"flex",alignItems:"center",gap:14}}>
+      {groups.map(g=>{
+        const gp=phases.filter(p=>p.group===g),gd=gp.filter(p=>p.status==="approved").length;
+        return(
+          <div key={g} style={{flex:1}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontSize:9,fontWeight:700,color:GC[g],letterSpacing:.8,textTransform:"uppercase"}}>{g}</span>
+              <span style={{fontSize:9,color:T.textDim}}>{gd}/{gp.length}</span>
+            </div>
+            <div style={{height:4,background:T.border,borderRadius:2,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${gp.length?gd/gp.length*100:0}%`,background:GC[g],borderRadius:2,transition:"width .6s"}}/>
+            </div>
+          </div>
+        );
+      })}
+      <div style={{minWidth:42,textAlign:"right"}}>
+        <span style={{fontSize:22,fontWeight:800,color:T.text,lineHeight:1}}>{pct}</span>
+        <span style={{fontSize:11,color:T.textDim}}>%</span>
+      </div>
+    </div>
+  );
+};
+
+/* ─── CHAT COMPONENT ─────────────────────────────────────────────────────────── */
+const Chat=({project,T,currentUser,showToast})=>{
+  const [channel,   setChannel]   = useState("general");
+  const [messages,  setMessages]  = useState(()=>makeMsgs("general"));
+  const [allMsgs,   setAllMsgs]   = useState(()=>{
+    const m={};CHANNELS.forEach(c=>{m[c.id]=makeMsgs(c.id);});return m;
+  });
+  const [text,      setText]      = useState("");
+  const [mentionQ,  setMentionQ]  = useState(null);
+  const [mentionPos,setMentionPos]= useState(0);
+  const [pendingAtt,setPendingAtt]= useState([]);
+  const [showLink,  setShowLink]  = useState(false);
+  const [extUrl,    setExtUrl]    = useState("");
+  const [extName,   setExtName]   = useState("");
+  const [showMems,  setShowMems]  = useState(false);
+  const [newMemName,setNewMemName]= useState("");
+  const [newMemEmail,setNewMemEmail]=useState("");
+  const [showNewMem,setShowNewMem]= useState(false);
+  const [members,   setMembers]   = useState(project.members||[]);
+  const bottomRef = useRef();
+  const inputRef  = useRef();
+
+  useEffect(()=>{
+    setMessages(allMsgs[channel]||[]);
+  },[channel]);
+
+  useEffect(()=>{
+    bottomRef.current?.scrollIntoView({behavior:"smooth"});
+  },[messages]);
+
+  const handleTextChange=(e)=>{
+    const val=e.target.value;setText(val);
+    const cursor=e.target.selectionStart;
+    const before=val.slice(0,cursor);
+    const m=before.match(/@([\w][\w\s]*)$/);
+    if(m){setMentionQ(m[1]);setMentionPos(before.lastIndexOf("@"));}
+    else setMentionQ(null);
+  };
+
+  const selectMention=(member)=>{
+    const before=text.slice(0,mentionPos);
+    const after=text.slice(inputRef.current?.selectionStart||text.length);
+    setText(`${before}@${member.name} ${after}`);
+    setMentionQ(null);inputRef.current?.focus();
+  };
+
+  const handleSend=()=>{
+    if(!text.trim()&&!pendingAtt.length) return;
+    const msg={
+      id:uid(),uid:currentUser.id,displayName:currentUser.name,
+      text:text.trim(),attachments:[...pendingAtt],ts:new Date(),
+    };
+    const updated={...allMsgs,[channel]:[...(allMsgs[channel]||[]),msg]};
+    setAllMsgs(updated);setMessages(updated[channel]);
+    // Simulate email on @mention
+    const mentioned=[...new Set((text.match(/@([\w][\w\s]*)/g)||[]).map(m=>m.slice(1).trim()))];
+    mentioned.forEach(name=>{
+      const m=members.find(mb=>mb.name.toLowerCase()===name.toLowerCase());
+      if(m&&m.id!==currentUser.id) showToast(`📧 Email trimis la ${m.email} — @menționare`,T.green);
+    });
+    setText("");setPendingAtt([]);
+  };
+
+  const deleteMsg=(msgId)=>{
+    const updated={...allMsgs,[channel]:allMsgs[channel].filter(m=>m.id!==msgId)};
+    setAllMsgs(updated);setMessages(updated[channel]);
+  };
+
+  const addExtLink=()=>{
+    if(!extUrl.trim()) return;
+    setPendingAtt(a=>[...a,{id:uid(),name:extName||extUrl,url:extUrl,external:true}]);
+    setExtUrl("");setExtName("");setShowLink(false);
+  };
+
+  const addMember=()=>{
+    if(!newMemName.trim()||!newMemEmail.trim()) return;
+    setMembers(m=>[...m,{id:uid(),name:newMemName.trim(),email:newMemEmail.trim(),role:"member"}]);
+    setNewMemName("");setNewMemEmail("");setShowNewMem(false);
+    showToast(`👤 ${newMemName} adăugat în proiect`,T.green);
+  };
+
+  const filteredMembers=mentionQ!==null?members.filter(m=>m.name.toLowerCase().includes(mentionQ.toLowerCase())).slice(0,5):[];
+  const ChanIcon=CHANNELS.find(c=>c.id===channel)?.Icon||Hash;
+  const chanLabel=CHANNELS.find(c=>c.id===channel)?.label||channel;
+
+  const inp={background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:"7px 10px",color:T.text,fontSize:12,outline:"none",fontFamily:"inherit"};
+
+  return(
+    <div style={{display:"flex",height:"calc(100vh - 260px)",minHeight:480,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.panel}}>
+
+      {/* Channel sidebar */}
+      <div style={{width:176,background:T.sidebar,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0}}>
+        <div style={{padding:"12px 12px 8px",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{fontSize:9,fontWeight:700,color:T.textDim,textTransform:"uppercase",letterSpacing:.9}}>Canale</div>
+        </div>
+        <div style={{flex:1,padding:"6px"}}>
+          {CHANNELS.map(ch=>{
+            const unread=ch.id!=="general"&&(allMsgs[ch.id]||[]).length>0&&ch.id!==channel?1:0;
+            return(
+              <button key={ch.id} onClick={()=>setChannel(ch.id)}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"7px 10px",borderRadius:7,
+                  background:channel===ch.id?`${T.accent}14`:"transparent",
+                  color:channel===ch.id?T.text:T.textMd,
+                  border:`1px solid ${channel===ch.id?T.accent+"33":"transparent"}`,
+                  cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:channel===ch.id?600:400,
+                  textAlign:"left",transition:"all .12s",justifyContent:"space-between"}}
+                onMouseEnter={e=>{if(channel!==ch.id)e.currentTarget.style.background=T.panelHov}}
+                onMouseLeave={e=>{if(channel!==ch.id)e.currentTarget.style.background="transparent"}}>
+                <span style={{display:"flex",alignItems:"center",gap:7}}><ch.Icon size={12}/>{ch.label}</span>
+                {unread>0&&<span style={{width:6,height:6,borderRadius:"50%",background:T.accent,flexShrink:0}}/>}
+              </button>
+            );
+          })}
+        </div>
+        {/* Members toggle */}
+        <div style={{padding:"6px",borderTop:`1px solid ${T.border}`}}>
+          <button onClick={()=>setShowMems(s=>!s)}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"7px 10px",borderRadius:7,
+              background:showMems?T.accentBg:"transparent",color:showMems?T.accentLt:T.textMd,
+              border:`1px solid ${showMems?T.accent+"33":"transparent"}`,
+              cursor:"pointer",fontFamily:"inherit",fontSize:12,justifyContent:"space-between"}}>
+            <span style={{display:"flex",alignItems:"center",gap:6}}><Users size={12}/>Membrii</span>
+            <span style={{fontSize:10,color:T.textDim,background:T.border,borderRadius:8,padding:"1px 5px"}}>{members.length}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main area */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
+        {showMems?(
+          /* Members panel */
+          <div style={{flex:1,overflowY:"auto"}}>
+            {/* header */}
+            <div style={{padding:"11px 16px",borderBottom:`1px solid ${T.border}`,background:T.sidebar,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <Users size={13} color={T.textMd}/>
+                <span style={{fontSize:13,fontWeight:700,color:T.text}}>Membrii proiectului</span>
+                <span style={{fontSize:10,color:T.textDim,background:T.border,borderRadius:10,padding:"1px 6px"}}>{members.length}</span>
+              </div>
+              <button onClick={()=>setShowNewMem(s=>!s)}
+                style={{display:"flex",alignItems:"center",gap:4,background:T.accentBg,border:`1px solid ${T.accent}44`,color:T.accentLt,borderRadius:6,padding:"5px 11px",cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:"inherit"}}>
+                <UserPlus size={11}/>Adaugă
+              </button>
+            </div>
+            {showNewMem&&(
+              <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,background:T.bg}}>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  <input value={newMemName} onChange={e=>setNewMemName(e.target.value)} placeholder="Nume complet" style={{flex:1,minWidth:120,...inp,boxSizing:"border-box"}}/>
+                  <input type="email" value={newMemEmail} onChange={e=>setNewMemEmail(e.target.value)} placeholder="Email" style={{flex:2,minWidth:160,...inp,boxSizing:"border-box"}} onKeyDown={e=>e.key==="Enter"&&addMember()}/>
+                  <button onClick={addMember} style={{background:T.accent,border:"none",borderRadius:7,padding:"7px 14px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Adaugă</button>
+                  <button onClick={()=>setShowNewMem(false)} style={{background:"transparent",border:`1px solid ${T.border}`,borderRadius:7,padding:"7px 9px",color:T.textDim,cursor:"pointer",display:"flex"}}><X size={13}/></button>
+                </div>
+                <div style={{fontSize:10,color:T.textDim,marginTop:5}}>Membrul va primi email când este @menționat în chat.</div>
+              </div>
+            )}
+            <div style={{padding:"8px"}}>
+              {members.map(m=>(
+                <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:8,transition:"background .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.panelHov}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <Avatar name={m.name} email={m.email} size={36}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text}}>{m.name}</div>
+                    <div style={{fontSize:10,color:T.textDim}}>{m.email}</div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    {m.role==="owner"&&<Chip label="Owner" color={T.amber} T={T}/>}
+                    <div style={{display:"flex",gap:-4}}>
+                      {/* Avatar color preview */}
+                      <div style={{width:10,height:10,borderRadius:"50%",background:avatarColor(m.email)}}/>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ):(
+          <>
+            {/* Channel header */}
+            <div style={{padding:"10px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,background:T.sidebar,flexShrink:0}}>
+              <ChanIcon size={13} color={T.textMd}/>
+              <span style={{fontSize:13,fontWeight:700,color:T.text}}>{chanLabel}</span>
+              <span style={{fontSize:11,color:T.textDim,marginLeft:2}}>— {project.name}</span>
+              {/* Member avatars in header */}
+              <div style={{marginLeft:"auto",display:"flex",alignItems:"center"}}>
+                {members.slice(0,4).map((m,i)=>(
+                  <Avatar key={m.id} name={m.name} email={m.email} size={22}
+                    style={{marginLeft:i===0?0:-6,border:`2px solid ${T.sidebar}`,zIndex:4-i}}/>
+                ))}
+                {members.length>4&&<span style={{fontSize:10,color:T.textDim,marginLeft:4}}>+{members.length-4}</span>}
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
+              {messages.length===0&&(
+                <div style={{textAlign:"center",padding:"40px 0",color:T.textDim}}>
+                  <MessageSquare size={26} color={T.borderLt} style={{display:"block",margin:"0 auto 10px"}}/>
+                  <div style={{fontSize:13,marginBottom:3}}>Niciun mesaj în #{chanLabel}</div>
+                  <div style={{fontSize:11}}>Fii primul care scrie ceva</div>
+                </div>
+              )}
+              {messages.map((msg,i)=>{
+                const member=members.find(m=>m.id===msg.uid);
+                const name=member?.name||msg.displayName||"?";
+                const email=member?.email||"";
+                const isMine=msg.uid===currentUser.id;
+                const [showDel,setShowDel]=useState(false);
+                return(
+                  <div key={msg.id} style={{display:"flex",gap:10,padding:"5px 0",position:"relative",alignItems:"flex-start"}}
+                    onMouseEnter={()=>setShowDel(true)} onMouseLeave={()=>setShowDel(false)}>
+                    <Avatar name={name} email={email} size={30}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:3}}>
+                        <span style={{fontSize:12,fontWeight:700,color:T.text}}>{name}</span>
+                        <span style={{fontSize:10,color:T.textDim}}>{fmtT(msg.ts)}</span>
+                        {isMine&&<Chip label="tu" color={T.textDim} T={T}/>}
+                      </div>
+                      {msg.text&&(
+                        <div style={{fontSize:13,color:T.textMd,lineHeight:1.55,wordBreak:"break-word"}}>
+                          <MsgText text={msg.text} T={T}/>
+                        </div>
+                      )}
+                      {(msg.attachments||[]).map(att=>(
+                        <div key={att.id} style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:5,background:T.panelHov,border:`1px solid ${T.border}`,borderRadius:7,padding:"5px 10px",maxWidth:300}}>
+                          {att.external?<Link2 size={12} color={T.textMd}/>:<FileText size={12} color={T.textMd}/>}
+                          <a href={att.url} target="_blank" rel="noreferrer" style={{fontSize:11,color:T.blue,textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{att.name}</a>
+                          {att.external&&<Chip label="link" color={T.amber} T={T}/>}
+                          <ExternalLink size={10} color={T.textDim}/>
+                        </div>
+                      ))}
+                    </div>
+                    {isMine&&showDel&&(
+                      <button onClick={()=>deleteMsg(msg.id)}
+                        style={{position:"absolute",right:0,top:4,background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:5,padding:"3px 7px",cursor:"pointer",display:"flex",alignItems:"center",gap:3,color:T.red,fontSize:10,fontFamily:"inherit"}}>
+                        <Trash2 size={10}/>Șterge
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <div ref={bottomRef}/>
+            </div>
+
+            {/* Pending attachments */}
+            {pendingAtt.length>0&&(
+              <div style={{padding:"6px 16px",borderTop:`1px solid ${T.border}`,display:"flex",gap:6,flexWrap:"wrap",background:T.panelHov}}>
+                {pendingAtt.map(att=>(
+                  <div key={att.id} style={{display:"inline-flex",alignItems:"center",gap:5,background:T.bg,border:`1px solid ${T.border}`,borderRadius:6,padding:"4px 8px",fontSize:11,color:T.textMd}}>
+                    {att.external?<Link2 size={11}/>:<FileText size={11}/>}
+                    <span style={{maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.name}</span>
+                    <button onClick={()=>setPendingAtt(a=>a.filter(x=>x.id!==att.id))} style={{background:"transparent",border:"none",color:T.textDim,cursor:"pointer",padding:0,display:"flex"}}><X size={11}/></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Link form */}
+            {showLink&&(
+              <div style={{padding:"8px 16px",borderTop:`1px solid ${T.border}`,background:T.bg,display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
+                <div style={{flex:2,minWidth:180}}>
+                  <div style={{fontSize:9,color:T.textDim,marginBottom:3,textTransform:"uppercase",letterSpacing:.6}}>URL (Drive / Dropbox)</div>
+                  <input value={extUrl} onChange={e=>setExtUrl(e.target.value)} placeholder="https://drive.google.com/…" style={{...inp,width:"100%",boxSizing:"border-box"}}/>
+                </div>
+                <div style={{flex:1,minWidth:110}}>
+                  <div style={{fontSize:9,color:T.textDim,marginBottom:3,textTransform:"uppercase",letterSpacing:.6}}>Denumire</div>
+                  <input value={extName} onChange={e=>setExtName(e.target.value)} placeholder="Document…" style={{...inp,width:"100%",boxSizing:"border-box"}}/>
+                </div>
+                <button onClick={addExtLink} style={{background:T.accent,border:"none",borderRadius:7,padding:"7px 14px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,fontFamily:"inherit",flexShrink:0}}>Adaugă</button>
+                <button onClick={()=>setShowLink(false)} style={{background:"transparent",border:`1px solid ${T.border}`,borderRadius:7,padding:"7px 9px",color:T.textDim,cursor:"pointer",display:"flex",flexShrink:0}}><X size={13}/></button>
+              </div>
+            )}
+
+            {/* Input */}
+            <div style={{padding:"10px 16px",borderTop:`1px solid ${T.border}`,flexShrink:0,position:"relative"}}>
+              {/* @mention dropdown */}
+              {mentionQ!==null&&filteredMembers.length>0&&(
+                <div style={{position:"absolute",bottom:"100%",left:16,right:16,background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:9,padding:4,marginBottom:4,boxShadow:T.shadowLg,zIndex:50}}>
+                  <div style={{fontSize:9,fontWeight:700,color:T.textDim,textTransform:"uppercase",letterSpacing:.8,padding:"4px 8px 6px"}}>Menționează</div>
+                  {filteredMembers.map(m=>(
+                    <div key={m.id} onClick={()=>selectMention(m)}
+                      style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,cursor:"pointer"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.panelHov}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <Avatar name={m.name} email={m.email} size={24}/>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{m.name}</div>
+                        <div style={{fontSize:10,color:T.textDim}}>{m.email}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{display:"flex",alignItems:"flex-end",gap:8,background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:9,padding:"8px 10px"}}>
+                {/* Action buttons */}
+                <div style={{display:"flex",gap:2,alignSelf:"flex-end",paddingBottom:1}}>
+                  <button onClick={()=>{ setPendingAtt(a=>[...a,{id:uid(),name:`Fisier_demo_${uid()}.pdf`,url:"#"}]); showToast("📎 Fișier atașat (demo)",T.textMd); }}
+                    title="Upload fișier" style={{background:"transparent",border:"none",color:T.textMd,cursor:"pointer",padding:"3px",borderRadius:5,display:"flex"}}>
+                    <Paperclip size={15}/>
+                  </button>
+                  <button onClick={()=>setShowLink(s=>!s)} title="Link Drive/Dropbox"
+                    style={{background:"transparent",border:"none",color:showLink?T.accent:T.textMd,cursor:"pointer",padding:"3px",borderRadius:5,display:"flex"}}>
+                    <Link2 size={15}/>
+                  </button>
+                  <button onClick={()=>{setText(t=>t+"@");setTimeout(()=>inputRef.current?.focus(),0);}} title="Menționează"
+                    style={{background:"transparent",border:"none",color:T.textMd,cursor:"pointer",padding:"3px",borderRadius:5,display:"flex"}}>
+                    <AtSign size={15}/>
+                  </button>
+                </div>
+                <textarea ref={inputRef} value={text} onChange={handleTextChange}
+                  onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&mentionQ===null){e.preventDefault();handleSend();}}}
+                  placeholder={`Scrie în #${chanLabel}… Enter trimite · @ menționează`}
+                  rows={1} style={{flex:1,background:"transparent",border:"none",color:T.text,fontSize:13,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.5,maxHeight:100,overflowY:"auto"}}
+                  onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}/>
+                <button onClick={handleSend} disabled={!text.trim()&&!pendingAtt.length}
+                  style={{background:(text.trim()||pendingAtt.length)?T.accent:T.border,border:"none",borderRadius:7,padding:"6px 10px",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",flexShrink:0,transition:"background .15s"}}>
+                  <Send size={14}/>
+                </button>
+              </div>
+              <div style={{fontSize:10,color:T.textDim,marginTop:4,paddingLeft:2}}>Enter = trimite · Shift+Enter = linie nouă · @ = menționează · notificare email automată</div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ─── PHASES VIEW ────────────────────────────────────────────────────────────── */
+const PhasesView=({project,onUpdate,T})=>{
+  const [openPh,setOpenPh]=useState(null);
+  const cols="12px 1fr 76px 76px 130px 62px 44px";
+  return(
+    <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+      <div style={{display:"grid",gridTemplateColumns:cols,gap:8,padding:"8px 16px",background:T.sidebar,borderBottom:`1px solid ${T.border}`}}>
+        {["","Fază","Start","Termen","Status","Avans","Zile"].map(h=><div key={h} style={{fontSize:10,fontWeight:600,color:T.textDim,textTransform:"uppercase",letterSpacing:.7}}>{h}</div>)}
+      </div>
+      {project.phases.map((ph,i)=>{
+        const dl=diffD(TODAY,ph.endDate),ov=dl<0&&ph.status!=="approved";
+        const c=GC[ph.group]||T.accent;
+        const pv={approved:100,submitted:75,in_progress:40,pending:0}[ph.status]||0;
+        const isOpen=openPh===ph.phaseId;
+        return(
+          <div key={ph.phaseId}>
+            <div onClick={()=>setOpenPh(isOpen?null:ph.phaseId)}
+              style={{display:"grid",gridTemplateColumns:cols,gap:8,alignItems:"center",padding:"9px 16px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:ov?`${T.red}06`:"transparent",transition:"background .12s"}}
+              onMouseEnter={e=>e.currentTarget.style.background=ov?`${T.red}0c`:T.panelHov}
+              onMouseLeave={e=>e.currentTarget.style.background=ov?`${T.red}06`:"transparent"}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:STATUS_META[ph.status]?.color||T.textDim,flexShrink:0}}/>
+              <div>
+                <div style={{fontSize:12,color:T.text,fontWeight:500}}>{ph.name}</div>
+                {ov&&<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><AlertTriangle size={10} color={T.red}/><span style={{fontSize:10,color:T.red}}>{-dl}z întârziat</span></div>}
+              </div>
+              <span style={{fontSize:11,color:T.textDim}}>{fmtS(ph.startDate)}</span>
+              <span style={{fontSize:11,color:ov?T.red:dl<7?T.amber:T.textDim}}>{fmtS(ph.endDate)}</span>
+              <div style={{display:"flex",alignItems:"center",gap:5}} onClick={e=>e.stopPropagation()}>
+                <StatusDot status={ph.status}/>
+                <select value={ph.status} onChange={e=>onUpdate(ph.phaseId,{status:e.target.value})}
+                  style={{background:"transparent",border:"none",color:STATUS_META[ph.status]?.color||T.text,fontSize:11,fontWeight:500,cursor:"pointer",outline:"none",fontFamily:"inherit"}}>
+                  {Object.entries(STATUS_META).map(([k,v])=><option key={k} value={k} style={{background:T.panel,color:v.color}}>{v.label}</option>)}
+                </select>
+              </div>
+              <MiniProg val={pv} color={c} T={T}/>
+              <div style={{fontSize:11,fontWeight:600,textAlign:"right",color:ph.status==="approved"?T.green:ov?T.red:dl<7?T.amber:T.textDim}}>
+                {ph.status==="approved"?<CheckCircle size={12} color={T.green}/>:`${dl}z`}
+              </div>
+            </div>
+            {isOpen&&(
+              <div style={{padding:"10px 36px 14px",borderBottom:`1px solid ${T.border}`,background:T.panelHov}}>
+                <div style={{fontSize:10,fontWeight:600,color:T.textDim,textTransform:"uppercase",letterSpacing:.7,marginBottom:7,display:"flex",alignItems:"center",gap:5}}><Paperclip size={11}/>Documente fază</div>
+                {(ph.attachments||[]).map(att=>(
+                  <div key={att.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 10px",background:T.bg,borderRadius:6,border:`1px solid ${T.border}`,marginBottom:4}}>
+                    <FileText size={12} color={T.textMd}/>
+                    <a href={att.url} style={{flex:1,fontSize:11,color:T.blue,textDecoration:"none"}}>{att.name}</a>
+                    <span style={{fontSize:10,color:T.textDim}}>{att.uploadedAt}</span>
+                  </div>
+                ))}
+                <button onClick={()=>onUpdate(ph.phaseId,{attachments:[...(ph.attachments||[]),{id:uid(),name:`Document_${ph.id}.pdf`,url:"#",uploadedAt:TODAY}]})}
+                  style={{display:"inline-flex",alignItems:"center",gap:5,background:T.accentBg,border:`1px solid ${T.accent}44`,color:T.accentLt,borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                  <Upload size={11}/>Adaugă document (demo)
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/* ─── AVIZE VIEW ─────────────────────────────────────────────────────────────── */
+const AvizeView=({project,onUpdate,T})=>{
+  const [open,setOpen]=useState(null);
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      {project.avize.map(av=>{
+        const inst=INST.find(i=>i.id===av.instId);if(!inst)return null;
+        const ds=av.steps.filter(s=>s.status==="approved").length;
+        const pv=Math.round(ds/av.steps.length*100);
+        const isOpen=open===av.avizId;
+        return(
+          <div key={av.avizId} style={{border:`1px solid ${isOpen?inst.color+"44":T.border}`,borderRadius:10,overflow:"hidden",background:T.panel,transition:"border-color .2s"}}>
+            <div onClick={()=>setOpen(isOpen?null:av.avizId)}
+              style={{display:"grid",gridTemplateColumns:"36px 1fr 130px 100px 110px 28px",gap:8,alignItems:"center",padding:"11px 16px",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.panelHov}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{width:32,height:32,borderRadius:8,background:`${inst.color}18`,border:`1px solid ${inst.color}30`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <inst.Icon size={16} color={inst.color}/>
+              </div>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:T.text}}>{inst.name}</div>
+                <div style={{display:"flex",gap:6,marginTop:3,flexWrap:"wrap",alignItems:"center"}}>
+                  {av.dosarNr&&<Chip label={`Nr. ${av.dosarNr}`} color={T.blue} T={T}/>}
+                  {(av.attachments||[]).length>0&&<Chip label={`${av.attachments.length} fișier${av.attachments.length>1?"e":""}`} color={T.green} T={T}/>}
+                </div>
+              </div>
+              <MiniProg val={pv} color={inst.color} w={70} T={T}/>
+              <span style={{fontSize:11,color:T.textDim}}>{ds}/{av.steps.length} pași</span>
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <StatusDot status={av.status}/>
+                <span style={{fontSize:11,color:STATUS_META[av.status]?.color,fontWeight:500}}>{STATUS_META[av.status]?.label}</span>
+              </div>
+              {isOpen?<ChevronDown size={14} color={T.textDim}/>:<ChevronRight size={14} color={T.textDim}/>}
+            </div>
+            {isOpen&&(
+              <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 16px 14px"}}>
+                {av.steps.map((step,si)=>{
+                  const dl=step.date?diffD(TODAY,step.date):null;
+                  return(
+                    <div key={step.stepId} style={{display:"grid",gridTemplateColumns:"20px 1fr 110px 46px",gap:8,alignItems:"center",padding:"7px 0",borderBottom:si<av.steps.length-1?`1px solid ${T.border}`:"none"}}>
+                      <div onClick={()=>{
+                        const ns=av.steps.map(s=>s.stepId===step.stepId?{...s,status:s.status==="approved"?"pending":"approved"}:s);
+                        onUpdate(av.avizId,{steps:ns,status:ns.every(s=>s.status==="approved")?"approved":av.status});
+                      }} style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${step.status==="approved"?inst.color:T.borderLt}`,background:step.status==="approved"?inst.color:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",flexShrink:0}}>
+                        {step.status==="approved"&&<CheckCircle size={10} color="#fff"/>}
+                      </div>
+                      <span style={{fontSize:12,color:step.status==="approved"?T.textDim:T.text,textDecoration:step.status==="approved"?"line-through":"none"}}>{step.name}</span>
+                      <span style={{fontSize:10,color:T.textDim}}>{fmt(step.date)}</span>
+                      <span style={{fontSize:10,fontWeight:600,textAlign:"right",color:step.status==="approved"?T.green:dl===null?T.textDim:dl<0?T.red:dl<5?T.amber:T.textDim}}>
+                        {step.status==="approved"?<CheckCircle size={11} color={T.green}/>:dl===null?"—":`${dl}z`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/* ─── TABS ───────────────────────────────────────────────────────────────────── */
+const TABS=[
+  {id:"faze",    label:"Faze",     I:Layers},
+  {id:"avize",   label:"Avize",    I:Building2},
+  {id:"gantt",   label:"Timeline", I:BarChart2},
+  {id:"chat",    label:"Chat",     I:MessageSquare},
+];
+
+/* ─── MAIN APP ───────────────────────────────────────────────────────────────── */
+export default function App(){
+  const [themeMode,setThemeMode]=useState("dark");
+  const sysDark=window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  const T=themeMode==="dark"||(themeMode==="auto"&&sysDark)?DARK:LIGHT;
+
+  const CURRENT_USER=MEMBERS[0]; // Ion Popescu = logged-in user
+
+  const [projects,setProjects]=useState(INIT_PROJECTS);
+  const [selId,setSelId]=useState("p1");
+  const [tab,setTab]=useState("faze");
+  const [showRem,setShowRem]=useState(false);
+  const [search,setSearch]=useState("");
+  const [coll,setColl]=useState(false);
+  const [toast,setToast]=useState(null);
+  const [uMenu,setUMenu]=useState(false);
+
+  const showToast=useCallback((msg,c)=>{setToast({msg,c:c||T.green});setTimeout(()=>setToast(null),3500);},[T]);
+
+  const sel=projects.find(p=>p.id===selId);
+  const filt=projects.filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase())||(p.client||"").toLowerCase().includes(search.toLowerCase()));
+  const alerts=projects.flatMap(p=>(p.phases||[]).filter(ph=>ph.status!=="approved"&&ph.status!=="rejected"&&diffD(TODAY,ph.endDate)>=0&&diffD(TODAY,ph.endDate)<=7).map(ph=>({pn:p.name,ph:ph.name,d:diffD(TODAY,ph.endDate)})));
+
+  const updPhase=(projId,phId,data)=>setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,phases:p.phases.map(ph=>ph.phaseId!==phId?ph:{...ph,...data})}));
+  const updAviz=(projId,avId,data)=>setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,avize:p.avize.map(av=>av.avizId!==avId?av:{...av,...data})}));
+
+  const themeIcon=themeMode==="dark"?<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>:themeMode==="light"?<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>:<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>;
+
+  const css=`
+    @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Geist','Helvetica Neue',sans-serif;}
+    ::-webkit-scrollbar{width:4px;height:4px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:${T.borderLt};border-radius:2px;}
+    select option{background:${T.panel};}
+    input[type=date]::-webkit-calendar-picker-indicator{filter:${T===DARK?"invert(.4)":"invert(.5)"};cursor:pointer;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    .fade-up{animation:fadeUp .18s ease;}
+    .fade-in{animation:fadeIn .15s ease;}
+    textarea{scrollbar-width:thin;}
+  `;
+
+  return(
+    <div style={{fontFamily:"'Geist','Helvetica Neue',sans-serif",background:T.bg,height:"100vh",color:T.text,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <style>{css}</style>
+
+      {/* ── TOP BAR ── */}
+      <header style={{height:46,background:T.sidebar,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,zIndex:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <div style={{width:26,height:26,borderRadius:7,background:`linear-gradient(135deg,${T.accent},${T.purple})`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 2px 8px ${T.accent}44`}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <span style={{fontSize:14,fontWeight:700,color:T.text,letterSpacing:"-.3px"}}>ArchPlan</span>
+        </div>
+        <div style={{width:1,height:18,background:T.border}}/>
+        <div style={{flex:1,display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+          <button onClick={()=>{setSelId(null);setShowRem(false);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:T.textDim,fontFamily:"inherit"}}>Proiecte</button>
+          {sel&&!showRem&&<><ChevronRight size={12} color={T.textDim}/><span style={{fontSize:12,color:T.text,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sel.name}</span></>}
+          {showRem&&<><ChevronRight size={12} color={T.textDim}/><span style={{fontSize:12,color:T.text,fontWeight:500}}>Remindere</span></>}
+        </div>
+        {alerts.length>0&&(
+          <div style={{display:"flex",alignItems:"center",gap:5,background:T.amberBg,border:`1px solid ${T.amber}44`,borderRadius:6,padding:"3px 10px",flexShrink:0}}>
+            <AlertTriangle size={11} color={T.amber}/>
+            <span style={{fontSize:11,color:T.amber,fontWeight:600}}>{alerts.length} termen{alerts.length>1?"e":""}</span>
+          </div>
+        )}
+        <button onClick={()=>setThemeMode(m=>m==="dark"?"light":m==="light"?"auto":"dark")}
+          style={{display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid ${T.border}`,borderRadius:7,width:32,height:32,color:T.textMd,cursor:"pointer"}}
+          title={`Temă: ${themeMode}`}>{themeIcon}</button>
+        <button style={{display:"flex",alignItems:"center",gap:5,background:T.accent,border:"none",borderRadius:7,padding:"6px 13px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>
+          <Plus size={13}/>Proiect nou
+        </button>
+        {/* User avatar */}
+        <div style={{position:"relative",flexShrink:0}}>
+          <div onClick={()=>setUMenu(s=>!s)} style={{cursor:"pointer"}}>
+            <Avatar name={CURRENT_USER.name} email={CURRENT_USER.email} size={30}/>
+          </div>
+          {uMenu&&(
+            <div className="fade-up" style={{position:"absolute",top:38,right:0,background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:10,padding:6,minWidth:210,boxShadow:T.shadowLg,zIndex:100}}>
+              <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
+                <Avatar name={CURRENT_USER.name} email={CURRENT_USER.email} size={36}/>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:T.text}}>{CURRENT_USER.name}</div>
+                  <div style={{fontSize:10,color:T.textDim}}>{CURRENT_USER.email}</div>
+                </div>
+              </div>
+              <button onClick={()=>setUMenu(false)} style={{width:"100%",background:"transparent",border:"none",padding:"7px 12px",color:T.red,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:6,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
+                <LogOut size={13}/>Deconectare
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+        {/* ── SIDEBAR ── */}
+        <aside style={{width:coll?48:252,background:T.sidebar,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,transition:"width .2s",overflow:"hidden"}}>
+          <div style={{padding:"8px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6}}>
+            {!coll&&(
+              <div style={{flex:1,display:"flex",alignItems:"center",gap:7,background:T.panel,border:`1px solid ${T.border}`,borderRadius:7,padding:"5px 10px"}}>
+                <Search size={12} color={T.textDim}/>
+                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Caută…"
+                  style={{flex:1,background:"transparent",border:"none",color:T.text,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+            )}
+            <button onClick={()=>setColl(s=>!s)} style={{background:"transparent",border:"none",color:T.textDim,cursor:"pointer",padding:4,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              {coll?<PanelLeftOpen size={15}/>:<PanelLeftClose size={15}/>}
+            </button>
+          </div>
+          {!coll&&<div style={{padding:"8px 14px 2px",fontSize:9,fontWeight:700,color:T.textDim,textTransform:"uppercase",letterSpacing:1}}>Proiecte ({filt.length})</div>}
+          <div style={{overflowY:"auto",flex:1,paddingBottom:8}}>
+            {filt.map(p=>{
+              const pc=pctOf(p.phases),next=p.phases.find(ph=>ph.status!=="approved"&&ph.status!=="rejected"),ov=next&&diffD(TODAY,next.endDate)<0;
+              const avDone=(p.avize||[]).filter(av=>av.status==="approved").length;
+              if(coll) return(
+                <div key={p.id} onClick={()=>{setSelId(p.id);setShowRem(false);}} title={p.name}
+                  style={{padding:8,display:"flex",justifyContent:"center",cursor:"pointer",borderRadius:7,margin:"2px 6px",background:selId===p.id&&!showRem?`${T.accent}14`:"transparent"}}>
+                  <div style={{width:28,height:28,borderRadius:7,background:T.panel,border:`1px solid ${selId===p.id?T.accent:T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:T.textMd,fontWeight:700}}>
+                    {p.name.slice(0,2).toUpperCase()}
+                  </div>
+                </div>
+              );
+              return(
+                <div key={p.id} onClick={()=>{setSelId(p.id);setShowRem(false);}}
+                  style={{padding:"10px 12px",borderRadius:8,margin:"1px 6px",cursor:"pointer",background:selId===p.id&&!showRem?`${T.accent}14`:"transparent",borderLeft:`2px solid ${selId===p.id&&!showRem?T.accent:"transparent"}`,transition:"background .12s"}}
+                  onMouseEnter={e=>{if(!(selId===p.id&&!showRem))e.currentTarget.style.background=T.panelHov}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=selId===p.id&&!showRem?`${T.accent}14`:"transparent"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <div style={{fontSize:12,fontWeight:selId===p.id&&!showRem?600:500,color:selId===p.id&&!showRem?T.text:T.textMd,flex:1,paddingRight:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                    <span style={{fontSize:10,fontWeight:700,color:ov?T.red:pc===100?T.green:T.textDim,flexShrink:0}}>{pc}%</span>
+                  </div>
+                  {p.client&&<div style={{fontSize:10,color:T.textDim,marginBottom:3,display:"flex",alignItems:"center",gap:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><User size={9}/>{p.client}</div>}
+                  {/* Member avatars */}
+                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:5}}>
+                    <div style={{display:"flex",alignItems:"center"}}>
+                      {(p.members||[]).slice(0,3).map((m,i)=>(
+                        <Avatar key={m.id} name={m.name} email={m.email} size={16} style={{marginLeft:i===0?0:-4,border:`1.5px solid ${T.sidebar}`}}/>
+                      ))}
+                    </div>
+                    <span style={{flex:1}}/>
+                    <Chip label={`${avDone}/${(p.avize||[]).length}`} color={avDone===(p.avize||[]).length&&p.avize.length>0?T.green:T.blue} T={T}/>
+                  </div>
+                  <div style={{height:2,background:T.border,borderRadius:1,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pc}%`,background:ov?T.red:pc===100?T.green:T.accent,borderRadius:1,transition:"width .4s"}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {!coll&&<div style={{padding:"8px 14px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6}}>
+            <Calendar size={11} color={T.textDim}/><span style={{fontSize:10,color:T.textDim}}>{fmt(TODAY)}</span>
+            <span style={{marginLeft:"auto",fontSize:9,color:T.textDim,background:T.border,borderRadius:3,padding:"1px 5px"}}>DEMO</span>
+          </div>}
+        </aside>
+
+        {/* ── MAIN ── */}
+        <main style={{flex:1,overflowY:"auto",background:T.bg,padding:20}} className="fade-in">
+          {!sel?(
+            /* Dashboard */
+            <div className="fade-in">
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:21,fontWeight:800,color:T.text,marginBottom:4,letterSpacing:"-.4px"}}>Dashboard</div>
+                <div style={{fontSize:13,color:T.textDim}}>Studio Office Kolectiv — {fmt(TODAY)}</div>
+              </div>
+              {/* KPIs */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
+                {[{l:"Total proiecte",v:projects.length,c:T.accent,I:Layers},{l:"Active",v:projects.filter(p=>!p.archived).length,c:T.amber,I:Clock},{l:"Finalizate",v:0,c:T.green,I:CheckCircle},{l:"Întârziate",v:0,c:T.red,I:AlertTriangle}].map(k=>(
+                  <div key={k.l} style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:"15px 18px",display:"flex",alignItems:"flex-start",gap:12}}>
+                    <div style={{width:36,height:36,borderRadius:9,background:`${k.c}14`,border:`1px solid ${k.c}28`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><k.I size={17} color={k.c}/></div>
+                    <div><div style={{fontSize:26,fontWeight:800,color:k.c,lineHeight:1}}>{k.v}</div><div style={{fontSize:11,color:T.textDim,marginTop:3}}>{k.l}</div></div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+                {projects.map(p=>{
+                  const pc=pctOf(p.phases),next=p.phases.find(ph=>ph.status!=="approved"&&ph.status!=="rejected"),ov=next&&diffD(TODAY,next.endDate)<0;
+                  return(
+                    <div key={p.id} onClick={()=>setSelId(p.id)}
+                      style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16,cursor:"pointer",transition:"border-color .15s,box-shadow .15s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=`${T.accent}66`;e.currentTarget.style.boxShadow=T.shadow;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text,flex:1,paddingRight:8,lineHeight:1.3}}>{p.name}</div>
+                        <span style={{fontSize:14,fontWeight:800,color:ov?T.red:pc===100?T.green:T.accent,flexShrink:0}}>{pc}%</span>
+                      </div>
+                      <div style={{fontSize:11,color:T.textDim,marginBottom:6,display:"flex",alignItems:"center",gap:4}}><User size={11}/>{p.client}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+                        {(p.members||[]).slice(0,4).map((m,i)=>(<Avatar key={m.id} name={m.name} email={m.email} size={20} style={{marginLeft:i===0?0:-4}}/>))}
+                        {(p.members||[]).length>4&&<span style={{fontSize:10,color:T.textDim}}>+{p.members.length-4}</span>}
+                      </div>
+                      <div style={{height:3,background:T.border,borderRadius:2,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${pc}%`,background:ov?T.red:pc===100?T.green:T.accent,borderRadius:2,transition:"width .5s"}}/>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ):(
+            /* Project detail */
+            <div className="fade-in">
+              <div style={{marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:12,flexWrap:"wrap"}}>
+                  <div>
+                    <h1 style={{margin:"0 0 6px",fontSize:21,fontWeight:800,color:T.text,letterSpacing:"-.4px"}}>{sel.name}</h1>
+                    <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                      {sel.client&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:T.textDim}}><User size={11}/>{sel.client}</span>}
+                      {sel.location&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:T.textDim}}><Map size={11}/>{sel.location}</span>}
+                      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:T.textDim}}><Calendar size={11}/>{fmt(sel.startDate)}</span>
+                      {/* member avatars in header */}
+                      <div style={{display:"flex",alignItems:"center",marginLeft:4}}>
+                        {(sel.members||[]).slice(0,5).map((m,i)=>(
+                          <Avatar key={m.id} name={m.name} email={m.email} size={20} style={{marginLeft:i===0?0:-5,border:`1.5px solid ${T.bg}`}} title={m.name}/>
+                        ))}
+                        {sel.members?.length>5&&<span style={{fontSize:10,color:T.textDim,marginLeft:4}}>+{sel.members.length-5}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",background:T.sidebar,borderRadius:8,padding:3,border:`1px solid ${T.border}`,gap:2}}>
+                    {TABS.map(t=>(
+                      <button key={t.id} onClick={()=>setTab(t.id)}
+                        style={{display:"flex",alignItems:"center",gap:5,background:tab===t.id?T.panel:"transparent",border:`1px solid ${tab===t.id?T.border:"transparent"}`,borderRadius:6,padding:"5px 11px",color:tab===t.id?T.text:T.textDim,cursor:"pointer",fontSize:11,fontWeight:tab===t.id?600:400,fontFamily:"inherit",transition:"all .12s"}}>
+                        <t.I size={12}/>{t.label}
+                        {t.id==="chat"&&<span style={{width:6,height:6,borderRadius:"50%",background:T.accent,display:"block"}}/>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{background:T.panel,borderRadius:9,padding:"12px 18px",border:`1px solid ${T.border}`}}>
+                  <MultiProg phases={sel.phases} T={T}/>
+                </div>
+              </div>
+
+              {tab==="faze"&&<PhasesView project={sel} onUpdate={(phId,data)=>updPhase(sel.id,phId,data)} T={T}/>}
+              {tab==="avize"&&<AvizeView project={sel} onUpdate={(avId,data)=>updAviz(sel.id,avId,data)} T={T}/>}
+              {tab==="gantt"&&(
+                <div style={{background:T.panel,borderRadius:10,padding:20,border:`1px solid ${T.border}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                    <BarChart2 size={14} color={T.textDim}/>
+                    <span style={{fontSize:11,fontWeight:600,color:T.textDim,textTransform:"uppercase",letterSpacing:.8}}>Timeline — Faze principale</span>
+                    <button onClick={()=>showToast("Export PDF A1 disponibil în versiunea deployată",T.green)} style={{marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:5,background:T.greenBg,border:`1px solid ${T.green}44`,color:T.green,borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                      <Download size={11}/>Export PDF A1
+                    </button>
+                  </div>
+                  <Gantt phases={sel.phases} T={T}/>
+                </div>
+              )}
+              {tab==="chat"&&<Chat project={sel} T={T} currentUser={CURRENT_USER} showToast={showToast}/>}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Footer */}
+      <footer style={{height:36,background:T.sidebar,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:14,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:18,height:18,borderRadius:4,background:`linear-gradient(135deg,${T.accent},${T.purple})`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          </div>
+          <span style={{fontSize:11,fontWeight:700,color:T.text}}>Studio Office Kolectiv</span>
+          <span style={{fontSize:10,color:T.textDim}}>CUI 32238680</span>
+        </div>
+        <div style={{height:12,width:1,background:T.border}}/>
+        <span style={{fontSize:10,color:T.textDim}}>Arhitectură · Urbanism · Design</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:14,alignItems:"center"}}>
+          <a href="https://www.studiokolectiv.ro" target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blue,textDecoration:"none",fontWeight:500}}>studiokolectiv.ro</a>
+          <span style={{fontSize:10,color:T.textDim}}>office@studiokolectiv.ro</span>
+          <span style={{fontSize:10,color:T.textDim}}>© 2025 ArchPlan</span>
+        </div>
+      </footer>
+
+      {/* Toast */}
+      {toast&&(
+        <div className="fade-up" style={{position:"fixed",bottom:20,right:20,background:T.panel,border:`1px solid ${toast.c}44`,borderRadius:9,padding:"10px 16px",boxShadow:T.shadowLg,zIndex:999,display:"flex",alignItems:"center",gap:8,maxWidth:360}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:toast.c,flexShrink:0}}/>
+          <span style={{fontSize:12,color:T.text,fontWeight:500}}>{toast.msg}</span>
+        </div>
+      )}
+    </div>
+  );
 }
