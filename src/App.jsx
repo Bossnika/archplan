@@ -1143,12 +1143,6 @@ export default function App(){
 
   if(!user) return <LoginPage T={T} />;
 
-  if(accessStatus === 'checking') return (
-    <div style={{minHeight:'100vh',background:DARK.bg,display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <div style={{color:DARK.textDim,fontSize:13}}>Verificare acces…</div>
-    </div>
-  );
-
   if(accessStatus === 'not_approved') return (
     <div style={{minHeight:'100vh',background:DARK.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,padding:24}}>
       <div style={{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#0969da,#8250df)',display:'flex',alignItems:'center',justifyContent:'center'}}>
