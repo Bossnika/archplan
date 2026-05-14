@@ -37,6 +37,15 @@ const LIGHT = {
   shadow:"0 4px 16px rgba(0,0,0,.10)",shadowLg:"0 16px 48px rgba(0,0,0,.16)",
 };
 
+/* ─── PROJECT TYPES ─────────────────────────────────────────────────────────── */
+const PROJECT_TYPES = [
+  { id: 'arhitectura', label: 'Arhitectură',    color: '#f85149' },
+  { id: 'urbanism',    label: 'Urbanism',        color: '#3fb950' },
+  { id: 'design',      label: 'Design Interior', color: '#bc8cff' },
+]
+const projTypeColor = (type) => PROJECT_TYPES.find(t=>t.id===type)?.color || '#58a6ff'
+const projTypeLabel = (type) => PROJECT_TYPES.find(t=>t.id===type)?.label || 'Arhitectură'
+
 /* ─── CONSTANTS ─────────────────────────────────────────────────────────────── */
 const GC = {CU:"#d29922",Avize:"#58a6ff",PT:"#bc8cff",AC:"#3fb950"};
 const STATUS_META = {
@@ -267,7 +276,13 @@ const SharedView = ({ token }) => {
   const T = DARK
 
   useEffect(() => {
-    getSharedProject(token).then(r => { if (r) setData(r); else setErr(true) })
+    try {
+      const decoded = JSON.parse(decodeURIComponent(escape(atob(token))))
+      setData({ project: { name: decoded.n, client: decoded.c, location: decoded.l, startDate: decoded.s, phases: decoded.ph||[], avize: decoded.av||[] }, config: decoded.cfg || {faze:true,avize:true} })
+    } catch(e) {
+      // fallback: try Firestore
+      getSharedProject(token).then(r => { if(r) setData(r); else setErr(true) }).catch(()=>setErr(true))
+    }
   }, [token])
 
   if (err) return (
@@ -1028,6 +1043,8 @@ export default function App(){
   const [newProjClient,setNewProjClient]=useState("");
   const [newProjLoc,setNewProjLoc]=useState("");
   const [newProjStart,setNewProjStart]=useState(TODAY);
+  const [newProjType,setNewProjType]=useState('arhitectura');
+  const [navSection, setNavSection] = useState('toate')
   const [showEditProj, setShowEditProj] = useState(false)
   const [editProjData, setEditProjData] = useState(null)
   const [showShareModal, setShowShareModal] = useState(false)
@@ -1069,6 +1086,12 @@ export default function App(){
     return unsub
   },[accessStatus, user])
 
+  useEffect(()=>{
+    const close = ()=>{ setProjMenuId(null); setUMenu(false); }
+    document.addEventListener('click', close)
+    return ()=>document.removeEventListener('click', close)
+  },[])
+
   const showToast=useCallback((msg,c)=>{setToast({msg,c:c||T.green});setTimeout(()=>setToast(null),3500);},[T]);
 
   const sel=projects.find(p=>p.id===selId);
@@ -1099,13 +1122,14 @@ export default function App(){
       client:newProjClient.trim(),
       location:newProjLoc.trim(),
       startDate:start,
+      type:newProjType,
       phases:mkPhases(start,Array(10).fill("pending")),
       avize:mkAvize(start),
       members:[{id:user.uid,name:CURRENT_USER.name,email:CURRENT_USER.email,role:"owner"}],
       acAttachments:[],
     };
     setShowNewProj(false);
-    setNewProjName("");setNewProjClient("");setNewProjLoc("");setNewProjStart(TODAY);
+    setNewProjName("");setNewProjClient("");setNewProjLoc("");setNewProjStart(TODAY);setNewProjType('arhitectura');
     showToast(`Proiect "${projName}" creat`,T.green);
     try { await createProject(user.uid,newProj) } catch(e) { console.error(e) }
   };
@@ -1117,6 +1141,7 @@ export default function App(){
       client: editProjData.client,
       location: editProjData.location,
       startDate: editProjData.startDate,
+      type: editProjData.type,
     })
     setShowEditProj(false)
     showToast('Proiect actualizat', T.green)
@@ -1131,17 +1156,23 @@ export default function App(){
     showToast('Proiect șters', T.red)
   }
 
-  const handleGenerateShare = async () => {
-    if(!shareTargetProj||!user) return
-    setShareLoading(true)
-    try {
-      const token = await createShareLink(user.uid, shareTargetProj.id, shareConfig, shareTargetProj)
-      setShareToken(token)
-    } catch(e) {
-      console.error('createShareLink:', e)
-      showToast('Eroare la generarea linkului. Verificați conexiunea.', T.red)
+  const handleGenerateShare = () => {
+    if(!shareTargetProj) return
+    const data = {
+      n: shareTargetProj.name,
+      c: shareTargetProj.client,
+      l: shareTargetProj.location,
+      s: shareTargetProj.startDate,
+      ph: shareConfig.faze ? shareTargetProj.phases : [],
+      av: shareConfig.avize ? shareTargetProj.avize : [],
+      cfg: shareConfig,
     }
-    setShareLoading(false)
+    try {
+      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))))
+      setShareToken(encoded)
+    } catch(e) {
+      showToast('Eroare la generarea linkului', T.red)
+    }
   }
 
   const themeIcon=themeMode==="dark"?<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>:themeMode==="light"?<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>:<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>;
@@ -1209,10 +1240,40 @@ export default function App(){
           <span style={{fontSize:14,fontWeight:700,color:T.text,letterSpacing:"-.3px"}}>ArchPlan</span>
         </button>
         <div style={{width:1,height:18,background:T.border}}/>
-        <div style={{flex:1,display:"flex",alignItems:"center",gap:5,minWidth:0}}>
-          <button onClick={()=>{setSelId(null);setShowRem(false);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:T.textDim,fontFamily:"inherit"}}>Proiecte</button>
-          {sel&&!showRem&&<><ChevronRight size={12} color={T.textDim}/><span style={{fontSize:12,color:T.text,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sel.name}</span></>}
-          {showRem&&<><ChevronRight size={12} color={T.textDim}/><span style={{fontSize:12,color:T.text,fontWeight:500}}>Remindere</span></>}
+        <div style={{flex:1,display:"flex",alignItems:"center",gap:4,minWidth:0,overflowX:'auto'}}>
+          {sel&&!showRem ? (
+            <>
+              <button onClick={()=>{setSelId(null);setShowRem(false);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:T.textDim,fontFamily:"inherit",flexShrink:0}}>Proiecte</button>
+              <ChevronRight size={12} color={T.textDim}/>
+              <span style={{fontSize:12,color:T.text,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sel.name}</span>
+            </>
+          ) : showRem ? (
+            <>
+              <button onClick={()=>{setSelId(null);setShowRem(false);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:T.textDim,fontFamily:"inherit",flexShrink:0}}>Proiecte</button>
+              <ChevronRight size={12} color={T.textDim}/>
+              <span style={{fontSize:12,color:T.text,fontWeight:500}}>Remindere</span>
+            </>
+          ) : (
+            <div style={{display:'flex',gap:3}}>
+              {[
+                {id:'toate',    label:'Toate'},
+                {id:'arhitectura', label:'Arhitectură', color:'#f85149'},
+                {id:'urbanism',    label:'Urbanism',    color:'#3fb950'},
+                {id:'avize',       label:'Avize',       color:'#58a6ff'},
+                {id:'financiar',   label:'Financiar',   color:'#d29922'},
+              ].map(s=>(
+                <button key={s.id} onClick={()=>setNavSection(s.id)}
+                  style={{background:navSection===s.id?(s.color?`${s.color}18`:T.accentBg):'transparent',
+                    border:`1px solid ${navSection===s.id?(s.color||T.accent)+'44':'transparent'}`,
+                    borderRadius:6,padding:'4px 10px',
+                    color:navSection===s.id?(s.color||T.accent):T.textDim,
+                    cursor:'pointer',fontSize:11,fontWeight:navSection===s.id?600:400,
+                    fontFamily:'inherit',transition:'all .12s',whiteSpace:'nowrap'}}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {alerts.length>0&&(
           <div style={{display:"flex",alignItems:"center",gap:5,background:T.amberBg,border:`1px solid ${T.amber}44`,borderRadius:6,padding:"3px 10px",flexShrink:0}}>
@@ -1220,6 +1281,11 @@ export default function App(){
             <span style={{fontSize:11,color:T.amber,fontWeight:600}}>{alerts.length} termen{alerts.length>1?"e":""}</span>
           </div>
         )}
+        <button onClick={()=>{if(sel){setTab('chat')}else{showToast('Selectează un proiect pentru chat',T.amber)}}}
+          style={{display:"flex",alignItems:"center",justifyContent:"center",background:sel&&tab==='chat'?T.accentBg:"transparent",border:`1px solid ${sel&&tab==='chat'?T.accent:T.border}`,borderRadius:7,width:32,height:32,color:sel&&tab==='chat'?T.accent:T.textMd,cursor:"pointer"}}
+          title="Chat proiect">
+          <MessageSquare size={14}/>
+        </button>
         <button onClick={()=>setThemeMode(m=>m==="dark"?"light":m==="light"?"auto":"dark")}
           style={{display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid ${T.border}`,borderRadius:7,width:32,height:32,color:T.textMd,cursor:"pointer"}}
           title={`Temă: ${themeMode}`}>{themeIcon}</button>
@@ -1315,8 +1381,11 @@ export default function App(){
                   style={{padding:"10px 12px",borderRadius:8,margin:"1px 6px",cursor:"pointer",background:selId===p.id&&!showRem?`${T.accent}14`:"transparent",borderLeft:`2px solid ${selId===p.id&&!showRem?T.accent:"transparent"}`,transition:"background .12s",position:'relative'}}
                   onMouseEnter={e=>{if(!(selId===p.id&&!showRem))e.currentTarget.style.background=T.panelHov}}
                   onMouseLeave={e=>{e.currentTarget.style.background=selId===p.id&&!showRem?`${T.accent}14`:"transparent"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                    <div style={{fontSize:12,fontWeight:selId===p.id&&!showRem?600:500,color:selId===p.id&&!showRem?T.text:T.textMd,flex:1,paddingRight:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,alignItems:"center"}}>
+                    <div style={{display:'flex',alignItems:'center',gap:5,flex:1,minWidth:0,paddingRight:6}}>
+                      <div style={{width:6,height:6,borderRadius:'50%',background:projTypeColor(p.type),flexShrink:0}}/>
+                      <div style={{fontSize:12,fontWeight:700,color:T.text,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                    </div>
                     <span style={{fontSize:10,fontWeight:700,color:ov?T.red:pc===100?T.green:T.textDim,flexShrink:0}}>{pc}%</span>
                     <button onClick={e=>{e.stopPropagation();setProjMenuId(projMenuId===p.id?null:p.id);}}
                       style={{background:'transparent',border:'none',color:T.textDim,cursor:'pointer',padding:2,display:'flex',alignItems:'center',flexShrink:0,borderRadius:4,opacity:.6}}
@@ -1374,8 +1443,16 @@ export default function App(){
               </div>
               {/* KPIs */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
-                {[{l:"Total proiecte",v:projects.length,c:T.accent,I:Layers},{l:"Active",v:projects.filter(p=>!p.archived).length,c:T.amber,I:Clock},{l:"Finalizate",v:0,c:T.green,I:CheckCircle},{l:"Întârziate",v:0,c:T.red,I:AlertTriangle}].map(k=>(
-                  <div key={k.l} style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:"15px 18px",display:"flex",alignItems:"flex-start",gap:12}}>
+                {[
+                  {l:"Total proiecte", v:projects.length,                                          c:T.accent, I:Layers,       ns:'toate'},
+                  {l:"Active",         v:projects.filter(p=>pctOf(p.phases)<100).length,           c:T.amber,  I:Clock,        ns:'active'},
+                  {l:"Finalizate",     v:projects.filter(p=>pctOf(p.phases)===100).length,         c:T.green,  I:CheckCircle,  ns:'finalizate'},
+                  {l:"Întârziate",     v:projects.filter(p=>(p.phases||[]).some(ph=>ph.status!=='approved'&&ph.status!=='rejected'&&diffD(TODAY,ph.endDate)<0)).length, c:T.red, I:AlertTriangle, ns:'intarziate'},
+                ].map(k=>(
+                  <div key={k.l} onClick={()=>setNavSection(k.ns)}
+                    style={{background:T.panel,border:`1px solid ${navSection===k.ns?k.c:T.border}`,borderRadius:10,padding:"15px 18px",display:"flex",alignItems:"flex-start",gap:12,cursor:'pointer',transition:'border-color .15s'}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=k.c}
+                    onMouseLeave={e=>e.currentTarget.style.borderColor=navSection===k.ns?k.c:T.border}>
                     <div style={{width:36,height:36,borderRadius:9,background:`${k.c}14`,border:`1px solid ${k.c}28`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><k.I size={17} color={k.c}/></div>
                     <div><div style={{fontSize:26,fontWeight:800,color:k.c,lineHeight:1}}>{k.v}</div><div style={{fontSize:11,color:T.textDim,marginTop:3}}>{k.l}</div></div>
                   </div>
@@ -1637,6 +1714,17 @@ export default function App(){
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}} onClick={()=>setShowNewProj(false)}>
           <div style={{background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:14,padding:28,width:420,boxShadow:T.shadowLg}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:18}}>Proiect nou</div>
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:10,color:T.textDim,display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.6}}>Tip proiect</label>
+              <div style={{display:'flex',gap:6}}>
+                {PROJECT_TYPES.map(pt=>(
+                  <button key={pt.id} onClick={()=>setNewProjType(pt.id)}
+                    style={{flex:1,background:newProjType===pt.id?`${pt.color}20`:'transparent',border:`1.5px solid ${newProjType===pt.id?pt.color:T.border}`,borderRadius:7,padding:'6px 4px',color:newProjType===pt.id?pt.color:T.textDim,cursor:'pointer',fontSize:11,fontWeight:newProjType===pt.id?700:400,fontFamily:'inherit',transition:'all .12s'}}>
+                    {pt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {[
               ["Nume proiect *","text",newProjName,setNewProjName,"ex: Locuință P+1E — Cluj"],
               ["Client","text",newProjClient,setNewProjClient,"ex: Familia Ionescu"],
