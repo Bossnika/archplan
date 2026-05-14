@@ -1,26 +1,12 @@
-// src/lib/uploadService.js — upload fișiere la Cloudflare R2 via Worker
-import { auth } from './firebase.js'
-
-const UPLOAD_URL = import.meta.env.VITE_UPLOAD_WORKER_URL
+// src/lib/uploadService.js — upload fișiere la Firebase Storage
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { storage } from './firebase.js'
 
 export async function uploadFile(file, uid, projectId, context = 'general') {
-  if (!UPLOAD_URL) throw new Error('VITE_UPLOAD_WORKER_URL nedefinit')
-
-  const token = await auth.currentUser.getIdToken()
-
-  const form = new FormData()
-  form.append('file', file)
-  form.append('uid', uid)
-  form.append('projectId', projectId)
-  form.append('context', context)
-
-  const res = await fetch(UPLOAD_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  })
-
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Upload eșuat')
-  return data // { url, name, size, key }
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `users/${uid}/projects/${projectId}/${context}/${Date.now()}_${safeName}`
+  const storageRef = ref(storage, path)
+  await uploadBytes(storageRef, file)
+  const url = await getDownloadURL(storageRef)
+  return { url, name: file.name, size: file.size }
 }
