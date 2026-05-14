@@ -107,10 +107,12 @@ export const listenPendingRequests = (cb) =>
     cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
 
 // ── SHARE LINKS ───────────────────────────────────────────────────────────────
-export const createShareLink = async (ownerUid, projectId, config) => {
+export const createShareLink = async (ownerUid, projectId, config, projectSnapshot) => {
   const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
   await setDoc(doc(db, 'sharedProjects', token), {
-    ownerUid, projectId, config, createdAt: serverTimestamp()
+    ownerUid, projectId, config,
+    project: projectSnapshot,
+    createdAt: serverTimestamp()
   })
   return token
 }
@@ -118,10 +120,9 @@ export const createShareLink = async (ownerUid, projectId, config) => {
 export const getSharedProject = async (token) => {
   const snap = await getDoc(doc(db, 'sharedProjects', token))
   if (!snap.exists()) return null
-  const { ownerUid, projectId, config } = snap.data()
-  const projSnap = await getDoc(doc(db, 'users', ownerUid, 'projects', projectId))
-  if (!projSnap.exists()) return null
-  return { project: { id: projSnap.id, ...projSnap.data() }, config }
+  const { project, config } = snap.data()
+  if (!project) return null
+  return { project, config }
 }
 
 export const deleteShareLink = (token) =>

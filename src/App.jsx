@@ -1093,8 +1093,9 @@ export default function App(){
   const handleNewProject=async()=>{
     if(!newProjName.trim()||!user) return;
     const start=newProjStart||TODAY;
+    const projName=newProjName.trim();
     const newProj={
-      name:newProjName.trim(),
+      name:projName,
       client:newProjClient.trim(),
       location:newProjLoc.trim(),
       startDate:start,
@@ -1103,10 +1104,10 @@ export default function App(){
       members:[{id:user.uid,name:CURRENT_USER.name,email:CURRENT_USER.email,role:"owner"}],
       acAttachments:[],
     };
-    try { await createProject(user.uid,newProj) } catch(e) { console.error(e) }
-    setNewProjName("");setNewProjClient("");setNewProjLoc("");setNewProjStart(TODAY);
     setShowNewProj(false);
-    showToast(`Proiect "${newProj.name}" creat`,T.green);
+    setNewProjName("");setNewProjClient("");setNewProjLoc("");setNewProjStart(TODAY);
+    showToast(`Proiect "${projName}" creat`,T.green);
+    try { await createProject(user.uid,newProj) } catch(e) { console.error(e) }
   };
 
   const handleEditProject = async () => {
@@ -1134,7 +1135,7 @@ export default function App(){
     if(!shareTargetProj||!user) return
     setShareLoading(true)
     try {
-      const token = await createShareLink(user.uid, shareTargetProj.id, shareConfig)
+      const token = await createShareLink(user.uid, shareTargetProj.id, shareConfig, shareTargetProj)
       setShareToken(token)
     } catch(e) {
       console.error('createShareLink:', e)
@@ -1302,7 +1303,7 @@ export default function App(){
               const pc=pctOf(p.phases),next=p.phases.find(ph=>ph.status!=="approved"&&ph.status!=="rejected"),ov=next&&diffD(TODAY,next.endDate)<0;
               const avDone=(p.avize||[]).filter(av=>av.status==="approved").length;
               if(coll) return(
-                <div key={p.id} onClick={()=>{setSelId(p.id);setShowRem(false);}} title={p.name}
+                <div key={p.id} onClick={()=>{setSelId(p.id);setTab("faze");setShowRem(false);}} title={p.name}
                   style={{padding:8,display:"flex",justifyContent:"center",cursor:"pointer",borderRadius:7,margin:"2px 6px",background:selId===p.id&&!showRem?`${T.accent}14`:"transparent"}}>
                   <div style={{width:28,height:28,borderRadius:7,background:T.panel,border:`1px solid ${selId===p.id?T.accent:T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:T.textMd,fontWeight:700}}>
                     {p.name.slice(0,2).toUpperCase()}
@@ -1310,7 +1311,7 @@ export default function App(){
                 </div>
               );
               return(
-                <div key={p.id} onClick={()=>{setSelId(p.id);setShowRem(false);}}
+                <div key={p.id} onClick={()=>{setSelId(p.id);setTab("faze");setShowRem(false);}}
                   style={{padding:"10px 12px",borderRadius:8,margin:"1px 6px",cursor:"pointer",background:selId===p.id&&!showRem?`${T.accent}14`:"transparent",borderLeft:`2px solid ${selId===p.id&&!showRem?T.accent:"transparent"}`,transition:"background .12s",position:'relative'}}
                   onMouseEnter={e=>{if(!(selId===p.id&&!showRem))e.currentTarget.style.background=T.panelHov}}
                   onMouseLeave={e=>{e.currentTarget.style.background=selId===p.id&&!showRem?`${T.accent}14`:"transparent"}}>
@@ -1384,7 +1385,7 @@ export default function App(){
                 {projects.map(p=>{
                   const pc=pctOf(p.phases),next=p.phases.find(ph=>ph.status!=="approved"&&ph.status!=="rejected"),ov=next&&diffD(TODAY,next.endDate)<0;
                   return(
-                    <div key={p.id} onClick={()=>setSelId(p.id)}
+                    <div key={p.id} onClick={()=>{setSelId(p.id);setTab("faze");}}
                       style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16,cursor:"pointer",transition:"border-color .15s,box-shadow .15s"}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=`${T.accent}66`;e.currentTarget.style.boxShadow=T.shadow;}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
