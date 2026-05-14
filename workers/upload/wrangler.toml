@@ -1,0 +1,11 @@
+name = "archplan-upload"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+FIREBASE_PROJECT_ID = "archplan-kolectiv"
+PUBLIC_BUCKET_URL = "https://pub-4cf2dd5e39344efe8118d1cd05b31a10.r2.dev"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "archplan-docs"

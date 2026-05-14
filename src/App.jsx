@@ -11,6 +11,7 @@ import { useAuth } from './hooks/useAuth.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, createShareLink, getSharedProject } from './lib/db.js'
 import { sendMentionEmail } from './lib/emailService.js'
+import { uploadFile } from './lib/uploadService.js'
 
 /* ─── THEME ─────────────────────────────────────────────────────────────────── */
 const DARK = {
@@ -672,8 +673,9 @@ const Chat=({project,T,currentUser,showToast})=>{
 };
 
 /* ─── PHASES VIEW ────────────────────────────────────────────────────────────── */
-const PhasesView=({project,onUpdate,T})=>{
+const PhasesView=({project,onUpdate,onUpload,T})=>{
   const [openPh,setOpenPh]=useState(null);
+  const [uploading,setUploading]=useState(null);
   const cols="12px 1fr 76px 76px 130px 62px 44px";
   return(
     <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -720,10 +722,20 @@ const PhasesView=({project,onUpdate,T})=>{
                     <span style={{fontSize:10,color:T.textDim}}>{att.uploadedAt}</span>
                   </div>
                 ))}
-                <button onClick={()=>onUpdate(ph.phaseId,{attachments:[...(ph.attachments||[]),{id:uid(),name:`Document_${ph.id}.pdf`,url:"#",uploadedAt:TODAY}]})}
-                  style={{display:"inline-flex",alignItems:"center",gap:5,background:T.accentBg,border:`1px solid ${T.accent}44`,color:T.accentLt,borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-                  <Upload size={11}/>Adaugă document (demo)
-                </button>
+                <label style={{display:"inline-flex",alignItems:"center",gap:5,background:uploading===ph.phaseId?T.border:T.accentBg,border:`1px solid ${T.accent}44`,color:T.accentLt,borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:600,cursor:uploading===ph.phaseId?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                  <Upload size={11}/>{uploading===ph.phaseId?"Se încarcă…":"Încarcă document"}
+                  <input type="file" style={{display:"none"}} disabled={!!uploading}
+                    onChange={async e=>{
+                      const file=e.target.files[0]; if(!file) return
+                      setUploading(ph.phaseId)
+                      try {
+                        const res = await onUpload(file, ph.phaseId)
+                        onUpdate(ph.phaseId,{attachments:[...(ph.attachments||[]),{id:uid(),name:res.name,url:res.url,size:res.size,uploadedAt:TODAY}]})
+                      } catch(err) { console.error(err) }
+                      setUploading(null)
+                      e.target.value=''
+                    }}/>
+                </label>
               </div>
             )}
           </div>
@@ -1434,7 +1446,8 @@ export default function App(){
                 </div>
               </div>
 
-              {tab==="faze"&&<PhasesView project={sel} onUpdate={(phId,data)=>updPhase(sel.id,phId,data)} T={T}/>}
+              {tab==="faze"&&<PhasesView project={sel} onUpdate={(phId,data)=>updPhase(sel.id,phId,data)} T={T}
+                onUpload={(file,phaseId)=>uploadFile(file,user.uid,sel.id,phaseId)}/>}
               {tab==="avize"&&<AvizeView project={sel} onUpdate={(avId,data)=>updAviz(sel.id,avId,data)} T={T}/>}
               {tab==="gantt"&&(
                 <div style={{background:T.panel,borderRadius:10,padding:20,border:`1px solid ${T.border}`}}>
