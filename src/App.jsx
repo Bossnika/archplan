@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import {
   Bell, Plus, Search, ChevronRight, AlertTriangle, CheckCircle, Clock,
   Circle, FileText, AlertCircle, Layers, Building2, BarChart2, User,
@@ -10,7 +12,7 @@ import {
 import { useAuth } from './hooks/useAuth.jsx'
 import { COMPANY } from './lib/constants.js'
 import LoginPage from './pages/LoginPage.jsx'
-import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, createShareLink, getSharedProject } from './lib/db.js'
+import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, createShareLink, getSharedProject, listenNotes, createNote, deleteNote, getOwnerEmail } from './lib/db.js'
 import { sendMentionEmail } from './lib/emailService.js'
 
 /* ─── THEME ─────────────────────────────────────────────────────────────────── */
@@ -809,6 +811,42 @@ const AvizeView=({project,onUpdate,T})=>{
             </div>
             {isOpen&&(
               <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 16px 14px"}}>
+                {/* Emission & expiry dates */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12,padding:'10px 0 12px',borderBottom:`1px solid ${T.border}`}}>
+                  <div>
+                    <div style={{fontSize:9,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.7,marginBottom:5}}>Dată emitere</div>
+                    <input type="date" value={av.emissionDate||''} onChange={e=>{
+                      const ed=e.target.value
+                      onUpdate(av.avizId,{emissionDate:ed, expiryDate:av.expiryDate||''})
+                    }} style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:'5px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.7,marginBottom:5}}>
+                      Dată expirare
+                      {av.expiryDate&&diffD(TODAY,av.expiryDate)<=20&&diffD(TODAY,av.expiryDate)>=0&&(
+                        <span style={{marginLeft:6,color:T.red,fontWeight:700}}>⚠ {diffD(TODAY,av.expiryDate)}z</span>
+                      )}
+                    </div>
+                    <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                      <input type="date" value={av.expiryDate||''} onChange={e=>onUpdate(av.avizId,{expiryDate:e.target.value})}
+                        style={{flex:1,background:T.bg,border:`1px solid ${av.expiryDate&&diffD(TODAY,av.expiryDate)<=20&&diffD(TODAY,av.expiryDate)>=0?T.red:T.borderLt}`,borderRadius:6,padding:'5px 8px',color:av.expiryDate&&diffD(TODAY,av.expiryDate)<=20&&diffD(TODAY,av.expiryDate)>=0?T.red:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                    </div>
+                    {av.emissionDate&&(
+                      <div style={{display:'flex',gap:4,marginTop:4}}>
+                        {[12,24].map(m=>(
+                          <button key={m} onClick={()=>{
+                            const base=new Date(av.emissionDate)
+                            base.setMonth(base.getMonth()+m)
+                            onUpdate(av.avizId,{expiryDate:base.toISOString().slice(0,10)})
+                          }} style={{flex:1,background:T.accentBg,border:`1px solid ${T.accent}33`,borderRadius:5,padding:'3px 0',color:T.accentLt,fontSize:10,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>
+                            +{m} luni
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Steps */}
                 {av.steps.map((step,si)=>{
                   const dl=step.date?diffD(TODAY,step.date):null;
                   return(
@@ -926,23 +964,22 @@ const ContractView = ({project, onUpdate, T}) => {
 }
 
 /* ─── CALENDAR ──────────────────────────────────────────────────────────────── */
-const CalendarWidget = ({projects, T, month, onPrev, onNext}) => {
+const CalendarWidget = ({projects, T, month, onPrev, onNext, notes=[], onAddNote, onDeleteNote}) => {
   const year  = month.getFullYear()
   const mon   = month.getMonth()
-  const first = new Date(year, mon, 1).getDay() // 0=Sun
+  const first = new Date(year, mon, 1).getDay()
   const days  = new Date(year, mon+1, 0).getDate()
-  const start = first === 0 ? 6 : first - 1 // Mon-start
+  const start = first === 0 ? 6 : first - 1
 
-  // Collect events per day
   const events = {}
-  const addEv = (dateStr, label, color, projName) => {
+  const addEv = (dateStr, label, color, projName, type='event') => {
     if(!dateStr) return
     const d = dateStr.slice(8,10).replace(/^0/,'')
     const m = parseInt(dateStr.slice(5,7))-1
     const y = parseInt(dateStr.slice(0,4))
     if(y===year && m===mon) {
       if(!events[d]) events[d]=[]
-      events[d].push({label, color, projName})
+      events[d].push({label, color, projName, type})
     }
   }
   projects.forEach(p=>{
@@ -953,18 +990,34 @@ const CalendarWidget = ({projects, T, month, onPrev, onNext}) => {
       if(av.status!=='approved')(av.steps||[]).forEach(s=>{
         if(s.status!=='approved') addEv(s.date, `Aviz`, '#58a6ff', p.name)
       })
+      if(av.expiryDate) addEv(av.expiryDate, `Exp. aviz`, '#f85149', p.name)
     })
   })
+  notes.forEach(n=>{
+    if(!n.date) return
+    const d = n.date.slice(8,10).replace(/^0/,'')
+    const m = parseInt(n.date.slice(5,7))-1
+    const y = parseInt(n.date.slice(0,4))
+    if(y===year && m===mon) {
+      if(!events[d]) events[d]=[]
+      events[d].push({label:n.text, color:'#bc8cff', projName:'Notă', type:'note', noteId:n.id})
+    }
+  })
 
-  const todayD   = new Date().getDate()
-  const todayM   = new Date().getMonth()
-  const todayY   = new Date().getFullYear()
-  const isToday  = (d) => d==todayD && mon==todayM && year==todayY
+  const todayD  = new Date().getDate()
+  const todayM  = new Date().getMonth()
+  const todayY  = new Date().getFullYear()
+  const isToday = (d) => d==todayD && mon==todayM && year==todayY
 
   const mNames = ['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie','Iulie','August','Septembrie','Octombrie','Noiembrie','Decembrie']
   const dNames = ['Lu','Ma','Mi','Jo','Vi','Sâ','Du']
 
   const [selDay, setSelDay] = useState(null)
+  const [newNote, setNewNote] = useState('')
+  const [addingNote, setAddingNote] = useState(false)
+
+  const selDateStr = selDay ? `${year}-${String(mon+1).padStart(2,'0')}-${String(selDay).padStart(2,'0')}` : null
+  const selEvs = selDay ? (events[String(selDay)]||[]) : []
 
   return (
     <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
@@ -984,8 +1037,8 @@ const CalendarWidget = ({projects, T, month, onPrev, onNext}) => {
           const today = isToday(d)
           const sel = selDay===d
           return (
-            <div key={d} onClick={()=>setSelDay(sel?null:d)}
-              style={{borderRadius:6,padding:'4px 2px',minHeight:36,cursor:evs.length?'pointer':'default',background:today?`${T.accent}18`:sel?T.panelHov:'transparent',border:`1px solid ${today?T.accent:sel?T.borderLt:'transparent'}`,position:'relative'}}>
+            <div key={d} onClick={()=>{setSelDay(sel?null:d);setAddingNote(false);setNewNote('');}}
+              style={{borderRadius:6,padding:'4px 2px',minHeight:36,cursor:'pointer',background:today?`${T.accent}18`:sel?T.panelHov:'transparent',border:`1px solid ${today?T.accent:sel?T.borderLt:'transparent'}`,position:'relative'}}>
               <div style={{textAlign:'center',fontSize:11,fontWeight:today?700:400,color:today?T.accent:T.text,marginBottom:2}}>{d}</div>
               <div style={{display:'flex',flexWrap:'wrap',gap:1,justifyContent:'center'}}>
                 {evs.slice(0,3).map((ev,j)=>(
@@ -997,14 +1050,38 @@ const CalendarWidget = ({projects, T, month, onPrev, onNext}) => {
           )
         })}
       </div>
-      {selDay && events[String(selDay)]?.length>0 && (
+      {selDay && (
         <div style={{marginTop:12,background:T.bg,borderRadius:8,padding:10,border:`1px solid ${T.border}`}}>
-          <div style={{fontSize:10,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>{selDay} {mNames[mon]}</div>
-          {events[String(selDay)].map((ev,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0',borderBottom:i<events[String(selDay)].length-1?`1px solid ${T.border}`:'none'}}>
+          <div style={{display:'flex',alignItems:'center',marginBottom:6}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.6,flex:1}}>{selDay} {mNames[mon]}</div>
+            {onAddNote&&<button onClick={()=>setAddingNote(s=>!s)}
+              style={{background:addingNote?T.accentBg:'transparent',border:`1px solid ${addingNote?T.accent:T.border}`,borderRadius:5,padding:'2px 8px',color:addingNote?T.accent:T.textDim,fontSize:10,cursor:'pointer',fontFamily:'inherit'}}>
+              + Notă
+            </button>}
+          </div>
+          {addingNote&&(
+            <div style={{display:'flex',gap:5,marginBottom:8}}>
+              <input value={newNote} onChange={e=>setNewNote(e.target.value)}
+                onKeyDown={e=>{if(e.key==='Enter'&&newNote.trim()){onAddNote(selDateStr,newNote.trim());setNewNote('');setAddingNote(false);}}}
+                placeholder="Adaugă notă sau reminder…"
+                autoFocus
+                style={{flex:1,background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:'5px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+              <button onClick={()=>{if(newNote.trim()){onAddNote(selDateStr,newNote.trim());setNewNote('');setAddingNote(false);}}}
+                style={{background:T.accent,border:'none',borderRadius:6,padding:'5px 10px',color:'#fff',fontSize:11,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>Sal.</button>
+            </div>
+          )}
+          {selEvs.length===0&&!addingNote&&<div style={{fontSize:11,color:T.textDim}}>Niciun eveniment. Adaugă o notă.</div>}
+          {selEvs.map((ev,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0',borderBottom:i<selEvs.length-1?`1px solid ${T.border}`:'none'}}>
               <div style={{width:7,height:7,borderRadius:'50%',background:ev.color,flexShrink:0}}/>
-              <div style={{fontSize:11,color:T.text,flex:1}}>{ev.label}</div>
-              <div style={{fontSize:10,color:T.textDim}}>{ev.projName}</div>
+              <div style={{fontSize:11,color:T.text,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.label}</div>
+              {ev.type!=='note'&&<div style={{fontSize:10,color:T.textDim,flexShrink:0}}>{ev.projName}</div>}
+              {ev.type==='note'&&onDeleteNote&&(
+                <button onClick={()=>onDeleteNote(ev.noteId)}
+                  style={{background:'transparent',border:'none',color:T.textDim,cursor:'pointer',padding:0,display:'flex',alignItems:'center',flexShrink:0}}>
+                  <X size={11}/>
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -1056,10 +1133,18 @@ export default function App(){
   const [deleteTargetProj, setDeleteTargetProj] = useState(null)
   const [projMenuId, setProjMenuId] = useState(null)
   const [calMonth, setCalMonth] = useState(()=>new Date())
+  const [notes, setNotes] = useState([])
+  const ganttRef = useRef(null)
 
   useEffect(()=>{
     if(!user) return;
     const unsub=listenProjects(user.uid, setProjects);
+    return unsub;
+  },[user]);
+
+  useEffect(()=>{
+    if(!user) return;
+    const unsub=listenNotes(user.uid, setNotes);
     return unsub;
   },[user]);
 
@@ -1072,6 +1157,8 @@ export default function App(){
       } else if(status === 'approved') {
         setAccessStatus('approved')
       } else {
+        // Auto-submit access request so owner is notified immediately
+        requestAccess(user.email, user.displayName||user.email.split('@')[0]).catch(()=>{})
         setAccessStatus('not_approved')
       }
     }).catch(err => {
@@ -1136,15 +1223,17 @@ export default function App(){
 
   const handleEditProject = async () => {
     if(!editProjData||!user) return
-    await updateProject(user.uid, editProjData.id, {
-      name: editProjData.name,
-      client: editProjData.client,
-      location: editProjData.location,
-      startDate: editProjData.startDate,
-      type: editProjData.type,
-    })
     setShowEditProj(false)
     showToast('Proiect actualizat', T.green)
+    try {
+      await updateProject(user.uid, editProjData.id, {
+        name: editProjData.name,
+        client: editProjData.client,
+        location: editProjData.location,
+        startDate: editProjData.startDate,
+        type: editProjData.type,
+      })
+    } catch(e) { console.error(e) }
   }
 
   const handleDeleteProject = async () => {
@@ -1212,15 +1301,15 @@ export default function App(){
       </div>
       <div style={{textAlign:'center'}}>
         <div style={{fontSize:18,fontWeight:700,color:DARK.text,marginBottom:8}}>Acces în așteptare</div>
-        <div style={{fontSize:13,color:DARK.textDim,maxWidth:360,lineHeight:1.6}}>
-          Cererea ta de acces a fost trimisă. Vei primi un email de confirmare după aprobare.<br/>
+        <div style={{fontSize:13,color:DARK.textDim,maxWidth:380,lineHeight:1.6}}>
+          Cererea ta de acces a fost trimisă automat proprietarului.<br/>
+          Vei putea intra în aplicație după ce ești aprobat.<br/><br/>
           Cont: <strong style={{color:DARK.text}}>{user.email}</strong>
         </div>
       </div>
-      <button onClick={async()=>{ await requestAccess(user.email, user.displayName||user.email); logout(); }}
-        style={{background:DARK.accent,border:'none',borderRadius:8,padding:'10px 22px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>
-        Trimite cerere de acces
-      </button>
+      <div style={{display:'flex',alignItems:'center',gap:8,background:`${DARK.green}14`,border:`1px solid ${DARK.green}44`,borderRadius:8,padding:'10px 18px',fontSize:12,color:DARK.green}}>
+        <CheckCircle size={14}/>Cerere trimisă — așteptați aprobarea
+      </div>
       <button onClick={logout} style={{background:'transparent',border:`1px solid ${DARK.border}`,borderRadius:8,padding:'8px 18px',color:DARK.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
         Deconectare
       </button>
@@ -1302,7 +1391,7 @@ export default function App(){
         )}
         {/* User avatar */}
         <div style={{position:"relative",flexShrink:0}}>
-          <div onClick={()=>setUMenu(s=>!s)} style={{cursor:"pointer"}}>
+          <div onClick={e=>{e.stopPropagation();setUMenu(s=>!s);}} style={{cursor:"pointer"}}>
             <Avatar name={CURRENT_USER.name} email={CURRENT_USER.email} size={30}/>
           </div>
           {uMenu&&(
@@ -1548,45 +1637,55 @@ export default function App(){
                 <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
                   <div style={{fontSize:11,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:12}}>Azi — {fmt(TODAY)}</div>
                   {(()=>{
-                    const evs=[]
+                    const projEvs={}
                     projects.forEach(p=>{
-                      (p.phases||[]).forEach(ph=>{
+                      const evs=[]
+                      ;(p.phases||[]).forEach(ph=>{
                         if(ph.status!=='approved'&&ph.status!=='rejected'){
                           const d=diffD(TODAY,ph.endDate)
-                          if(d>=0&&d<=7) evs.push({type:'faza',label:ph.name,proj:p.name,d,color:'#d29922'})
+                          if(d>=0&&d<=7) evs.push({type:'faza',label:ph.name,d,color:'#d29922'})
                         }
                       });
-                      (p.avize||[]).forEach(av=>{
+                      ;(p.avize||[]).forEach(av=>{
                         if(av.status!=='approved'){
                           const inst=INST.find(i=>i.id===av.instId)
                           ;(av.steps||[]).forEach(s=>{
                             if(s.status!=='approved'&&s.date){
                               const d=diffD(TODAY,s.date)
-                              if(d>=0&&d<=7) evs.push({type:'aviz',label:`Aviz ${inst?.short||''}`,proj:p.name,d,color:'#58a6ff'})
+                              if(d>=0&&d<=7) evs.push({type:'aviz',label:`Aviz ${inst?.short||av.instId}`,d,color:'#58a6ff'})
                             }
                           })
                         }
                       })
+                      if(evs.length>0) projEvs[p.id]={name:p.name,color:projTypeColor(p.type),evs:evs.sort((a,b)=>a.d-b.d)}
                     })
-                    evs.sort((a,b)=>a.d-b.d)
-                    if(evs.length===0) return <div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'20px 0'}}>Niciun termen în următoarele 7 zile 🎉</div>
-                    return evs.map((ev,i)=>(
-                      <div key={i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'7px 0',borderBottom:i<evs.length-1?`1px solid ${T.border}`:'none'}}>
-                        <div style={{width:7,height:7,borderRadius:'50%',background:ev.color,marginTop:4,flexShrink:0}}/>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:12,color:T.text,fontWeight:500}}>{ev.label}</div>
-                          <div style={{fontSize:10,color:T.textDim}}>{ev.proj}</div>
+                    const projIds=Object.keys(projEvs)
+                    if(projIds.length===0) return <div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'20px 0'}}>Niciun termen în următoarele 7 zile 🎉</div>
+                    return projIds.map((pid,pi)=>(
+                      <div key={pid} style={{marginBottom:pi<projIds.length-1?10:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4,paddingBottom:4,borderBottom:`1px solid ${T.border}`}}>
+                          <div style={{width:7,height:7,borderRadius:'50%',background:projEvs[pid].color,flexShrink:0}}/>
+                          <span style={{fontSize:11,fontWeight:700,color:projEvs[pid].color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{projEvs[pid].name}</span>
                         </div>
-                        <div style={{fontSize:10,fontWeight:600,color:ev.d===0?T.red:ev.d<=2?T.amber:T.textMd,flexShrink:0}}>
-                          {ev.d===0?'Azi':ev.d===1?'Mâine':`${ev.d}z`}
-                        </div>
+                        {projEvs[pid].evs.map((ev,i)=>(
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0 4px 14px',borderBottom:i<projEvs[pid].evs.length-1?`1px solid ${T.border}33`:'none'}}>
+                            <div style={{width:5,height:5,borderRadius:'50%',background:ev.color,flexShrink:0}}/>
+                            <div style={{flex:1,fontSize:12,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.label}</div>
+                            <div style={{fontSize:10,fontWeight:600,color:ev.d===0?T.red:ev.d<=2?T.amber:T.textMd,flexShrink:0}}>
+                              {ev.d===0?'Azi':ev.d===1?'Mâine':`${ev.d}z`}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ))
                   })()}
                 </div>
                 <CalendarWidget projects={projects} T={T} month={calMonth}
                   onPrev={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()-1,1))}
-                  onNext={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()+1,1))}/>
+                  onNext={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()+1,1))}
+                  notes={notes}
+                  onAddNote={(date, text)=>{ if(user) createNote(user.uid, {date, text, type:'note'}) }}
+                  onDeleteNote={(noteId)=>{ if(user) deleteNote(user.uid, noteId) }}/>
               </div>
             </div>
           ):(
@@ -1631,11 +1730,38 @@ export default function App(){
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
                     <BarChart2 size={14} color={T.textDim}/>
                     <span style={{fontSize:11,fontWeight:600,color:T.textDim,textTransform:"uppercase",letterSpacing:.8}}>Timeline — Faze principale</span>
-                    <button onClick={()=>showToast("Export PDF A1 disponibil în versiunea deployată",T.green)} style={{marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:5,background:T.greenBg,border:`1px solid ${T.green}44`,color:T.green,borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-                      <Download size={11}/>Export PDF A1
+                    <button onClick={async()=>{
+                      if(!ganttRef.current) return
+                      showToast('Se generează PDF…', T.textMd)
+                      try {
+                        const canvas = await html2canvas(ganttRef.current, {
+                          backgroundColor: T===DARK?'#161b22':'#ffffff',
+                          scale: 2,
+                          useCORS: true,
+                        })
+                        const pdf = new jsPDF({orientation:'landscape',unit:'mm',format:'a3'})
+                        const pw = pdf.internal.pageSize.getWidth()
+                        const ph = pdf.internal.pageSize.getHeight()
+                        const ratio = Math.min(pw/canvas.width, ph/canvas.height)
+                        const iw = canvas.width*ratio
+                        const ih = canvas.height*ratio
+                        const mx = (pw-iw)/2
+                        const my = (ph-ih)/2
+                        pdf.addImage(canvas.toDataURL('image/png'),'PNG',mx,my,iw,ih)
+                        pdf.save(`${sel.name.replace(/[^a-zA-Z0-9]/g,'_')}_Gantt.pdf`)
+                        showToast('PDF exportat!', T.green)
+                      } catch(e) {
+                        console.error(e)
+                        showToast('Eroare la export PDF', T.red)
+                      }
+                    }} style={{marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:5,background:T.greenBg,border:`1px solid ${T.green}44`,color:T.green,borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                      <Download size={11}/>Export PDF A3
                     </button>
                   </div>
-                  <Gantt phases={sel.phases} T={T}/>
+                  <div ref={ganttRef} style={{background:T.panel,padding:8,borderRadius:8}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12,padding:'0 4px'}}>{sel.name} — Timeline</div>
+                    <Gantt phases={sel.phases} T={T}/>
+                  </div>
                 </div>
               )}
               {tab==="chat"&&<Chat project={sel} T={T} currentUser={CURRENT_USER} showToast={showToast}/>}

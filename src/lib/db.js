@@ -21,6 +21,19 @@ export const updateProject = (uid, projectId, data) =>
 export const deleteProject = (uid, projectId) =>
   deleteDoc(doc(db, 'users', uid, 'projects', projectId))
 
+// ── NOTES / CALENDAR ──────────────────────────────────────────────────────────
+export const notesCol = (uid) => collection(db, 'users', uid, 'notes')
+
+export const listenNotes = (uid, cb) =>
+  onSnapshot(query(notesCol(uid), orderBy('date', 'asc')), snap =>
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+
+export const createNote = (uid, data) =>
+  addDoc(notesCol(uid), { ...data, createdAt: serverTimestamp() })
+
+export const deleteNote = (uid, noteId) =>
+  deleteDoc(doc(db, 'users', uid, 'notes', noteId))
+
 // ── REMINDERS ─────────────────────────────────────────────────────────────────
 export const remindersCol = (uid) => collection(db, 'users', uid, 'reminders')
 
@@ -101,6 +114,11 @@ export const approveAccess = async (email) => {
 
 export const rejectAccess = (email) =>
   updateDoc(doc(db, 'accessRequests', email.replace(/[@.]/g, '_')), { status: 'rejected' })
+
+export const getOwnerEmail = async () => {
+  const snap = await getDoc(accessRef)
+  return snap.exists() ? (snap.data().ownerEmail || null) : null
+}
 
 export const listenPendingRequests = (cb) =>
   onSnapshot(query(collection(db, 'accessRequests'), where('status', '==', 'pending')), snap =>
