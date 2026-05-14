@@ -1,5 +1,9 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()))
+}
 import { AuthProvider } from './hooks/useAuth.jsx'
 import { ThemeProvider } from './hooks/useTheme.jsx'
 import App from './App.jsx'
