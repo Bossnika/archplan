@@ -1078,7 +1078,7 @@ export default function App(){
       members:[{id:user.uid,name:CURRENT_USER.name,email:CURRENT_USER.email,role:"owner"}],
       acAttachments:[],
     };
-    await createProject(user.uid,newProj);
+    try { await createProject(user.uid,newProj) } catch(e) { console.error(e) }
     setNewProjName("");setNewProjClient("");setNewProjLoc("");setNewProjStart(TODAY);
     setShowNewProj(false);
     showToast(`Proiect "${newProj.name}" creat`,T.green);
@@ -1108,8 +1108,13 @@ export default function App(){
   const handleGenerateShare = async () => {
     if(!shareTargetProj||!user) return
     setShareLoading(true)
-    const token = await createShareLink(user.uid, shareTargetProj.id, shareConfig)
-    setShareToken(token)
+    try {
+      const token = await createShareLink(user.uid, shareTargetProj.id, shareConfig)
+      setShareToken(token)
+    } catch(e) {
+      console.error('createShareLink:', e)
+      showToast('Eroare la generarea linkului. Verificați conexiunea.', T.red)
+    }
     setShareLoading(false)
   }
 
@@ -1171,12 +1176,12 @@ export default function App(){
 
       {/* ── TOP BAR ── */}
       <header style={{height:46,background:T.sidebar,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,zIndex:20}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+        <button onClick={()=>{setSelId(null);setShowRem(false);}} style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,background:"none",border:"none",cursor:"pointer",padding:0}}>
           <div style={{width:26,height:26,borderRadius:7,background:`linear-gradient(135deg,${T.accent},${T.purple})`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 2px 8px ${T.accent}44`}}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </div>
           <span style={{fontSize:14,fontWeight:700,color:T.text,letterSpacing:"-.3px"}}>ArchPlan</span>
-        </div>
+        </button>
         <div style={{width:1,height:18,background:T.border}}/>
         <div style={{flex:1,display:"flex",alignItems:"center",gap:5,minWidth:0}}>
           <button onClick={()=>{setSelId(null);setShowRem(false);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:T.textDim,fontFamily:"inherit"}}>Proiecte</button>
