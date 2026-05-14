@@ -12,7 +12,7 @@ import {
 import { useAuth } from './hooks/useAuth.jsx'
 import { COMPANY } from './lib/constants.js'
 import LoginPage from './pages/LoginPage.jsx'
-import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, createShareLink, getSharedProject, listenNotes, createNote, deleteNote, getOwnerEmail } from './lib/db.js'
+import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, listenApprovedUsers, createShareLink, getSharedProject, listenNotes, createNote, deleteNote, getOwnerEmail } from './lib/db.js'
 import { sendMentionEmail } from './lib/emailService.js'
 
 /* ─── THEME ─────────────────────────────────────────────────────────────────── */
@@ -408,7 +408,7 @@ const SharedView = ({ token }) => {
 }
 
 /* ─── CHAT COMPONENT ─────────────────────────────────────────────────────────── */
-const Chat=({project,T,currentUser,showToast})=>{
+const Chat=({project,T,currentUser,showToast,approvedUsers=[]})=>{
   const [channel,   setChannel]   = useState("general");
   const [messages,  setMessages]  = useState([]);
   const [text,      setText]      = useState("");
@@ -593,6 +593,31 @@ const Chat=({project,T,currentUser,showToast})=>{
                   </div>
                 </div>
               ))}
+              {approvedUsers.filter(u=>!members.some(m=>m.email===u.email)).length>0&&(
+                <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:9,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.8,padding:'0 12px 6px'}}>Utilizatori platformă (neadăugați)</div>
+                  {approvedUsers.filter(u=>!members.some(m=>m.email===u.email)).map(u=>(
+                    <div key={u.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:8}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.panelHov}
+                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <Avatar name={u.name||u.email} email={u.email} size={32}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{u.name||u.email.split('@')[0]}</div>
+                        <div style={{fontSize:10,color:T.textDim}}>{u.email}</div>
+                      </div>
+                      <button onClick={()=>{
+                        const newMem={id:u.id||uid(),name:u.name||u.email.split('@')[0],email:u.email,role:'member'}
+                        const updatedMems=[...members,newMem]
+                        setMembers(updatedMems)
+                        updateProject(user.uid,project.id,{members:updatedMems})
+                        showToast(`${newMem.name} adăugat în proiect`,T.green)
+                      }} style={{background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:6,padding:'4px 10px',color:T.accent,fontSize:10,cursor:'pointer',fontFamily:'inherit',fontWeight:600,flexShrink:0}}>
+                        + Adaugă
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ):(
@@ -1166,6 +1191,166 @@ const CalendarWidget = ({projects, T, month, onPrev, onNext, notes=[], onAddNote
   )
 }
 
+/* ─── AVIZE DASHBOARD ────────────────────────────────────────────────────────── */
+const AvizeDashboard = ({projects, T, onNavigate}) => {
+  const [statusF, setStatusF] = useState('all')
+  const [validityF, setValidityF] = useState('all')
+  const [sortBy, setSortBy] = useState('project')
+  const [selInst, setSelInst] = useState(null)
+
+  const allAvize = projects.flatMap(p=>
+    (p.avize||[]).map(av=>({...av, projId:p.id, projName:p.name, projType:p.type||'arhitectura'}))
+  )
+
+  const filtered = allAvize.filter(av=>{
+    if(statusF!=='all' && av.status!==statusF) return false
+    if(validityF!=='all') {
+      const dl = av.expiryDate ? Math.round((new Date(av.expiryDate)-new Date())/86400000) : null
+      if(validityF==='expiring' && !(dl!==null&&dl>=0&&dl<=30)) return false
+      if(validityF==='expired' && !(dl!==null&&dl<0)) return false
+      if(validityF==='valid' && !(dl!==null&&dl>30)) return false
+      if(validityF==='no_date' && dl!==null) return false
+    }
+    if(selInst && av.instId!==selInst) return false
+    return true
+  }).sort((a,b)=>{
+    if(sortBy==='project') return a.projName.localeCompare(b.projName)
+    if(sortBy==='expiry') {
+      const da = a.expiryDate?new Date(a.expiryDate):new Date('2099-01-01')
+      const db2= b.expiryDate?new Date(b.expiryDate):new Date('2099-01-01')
+      return da-db2
+    }
+    if(sortBy==='estimated') {
+      const da = a.estimatedDate?new Date(a.estimatedDate):new Date('2099-01-01')
+      const db2= b.estimatedDate?new Date(b.estimatedDate):new Date('2099-01-01')
+      return da-db2
+    }
+    return 0
+  })
+
+  const sel = selInst ? INST.find(i=>i.id===selInst) : null
+  const selF = {background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:6,padding:'4px 10px',color:T.accent,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}
+  const normF = {background:'transparent',border:`1px solid ${T.border}`,borderRadius:6,padding:'4px 10px',color:T.textDim,cursor:'pointer',fontSize:11,fontFamily:'inherit'}
+
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.text}}>Tracking avize</div>
+        <div style={{marginLeft:'auto',display:'flex',gap:6,flexWrap:'wrap'}}>
+          {/* Status filter */}
+          <select value={statusF} onChange={e=>setStatusF(e.target.value)}
+            style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:6,padding:'4px 10px',color:T.textMd,fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+            <option value="all">Toate statusurile</option>
+            <option value="pending">De obținut</option>
+            <option value="in_progress">În lucru</option>
+            <option value="submitted">Depus</option>
+            <option value="approved">Obținut</option>
+            <option value="rejected">Respins</option>
+          </select>
+          {/* Validity filter */}
+          <select value={validityF} onChange={e=>setValidityF(e.target.value)}
+            style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:6,padding:'4px 10px',color:T.textMd,fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+            <option value="all">Toate valabilitățile</option>
+            <option value="expiring">Expiră curând (&lt;30z)</option>
+            <option value="expired">Expirate</option>
+            <option value="valid">Valide</option>
+            <option value="no_date">Fără dată expirare</option>
+          </select>
+          {/* Sort */}
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+            style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:6,padding:'4px 10px',color:T.textMd,fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+            <option value="project">Sort: Proiect</option>
+            <option value="expiry">Sort: Expirare</option>
+            <option value="estimated">Sort: Estimare emitere</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Institution filter chips */}
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:16}}>
+        <button onClick={()=>setSelInst(null)} style={selInst===null?selF:normF}>Toate instituțiile</button>
+        {INST.map(inst=>{
+          const count = allAvize.filter(av=>av.instId===inst.id).length
+          return (
+            <button key={inst.id} onClick={()=>setSelInst(selInst===inst.id?null:inst.id)}
+              style={selInst===inst.id?{...selF,color:inst.color,background:`${inst.color}14`,borderColor:`${inst.color}44`}:normF}>
+              <span style={{display:'flex',alignItems:'center',gap:5}}>
+                <inst.Icon size={11} color={selInst===inst.id?inst.color:T.textDim}/>
+                {inst.short}
+                <span style={{fontSize:9,background:T.border,borderRadius:8,padding:'0 4px'}}>{count}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Institution info card when selected */}
+      {sel&&(
+        <div style={{background:`${sel.color}0a`,border:`1px solid ${sel.color}33`,borderRadius:10,padding:14,marginBottom:16}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+            <div style={{width:32,height:32,borderRadius:8,background:`${sel.color}18`,border:`1px solid ${sel.color}44`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <sel.Icon size={16} color={sel.color}/>
+            </div>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:T.text}}>{sel.name}</div>
+              <div style={{fontSize:10,color:T.textDim}}>Valabilitate standard: {sel.validity} luni</div>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:T.textMd,lineHeight:1.6}}>{sel.info}</div>
+        </div>
+      )}
+
+      {/* Aviz list */}
+      {filtered.length===0&&(
+        <div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'30px 0'}}>Niciun aviz corespunde filtrelor selectate</div>
+      )}
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {filtered.map((av,i)=>{
+          const inst=INST.find(x=>x.id===av.instId)
+          const dl=av.expiryDate?Math.round((new Date(av.expiryDate)-new Date())/86400000):null
+          const estDl=av.estimatedDate?Math.round((new Date(av.estimatedDate)-new Date())/86400000):null
+          const sm={pending:{l:'De obținut',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Obținut',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
+          const s=sm[av.status]||sm.pending
+          const tc=PROJECT_TYPES.find(pt=>pt.id===av.projType)?.color||'#58a6ff'
+          return (
+            <div key={i} onClick={()=>onNavigate(av.projId,'avize')}
+              style={{display:'grid',gridTemplateColumns:'36px 1fr 160px 130px 100px',gap:10,alignItems:'center',padding:'11px 14px',background:T.panel,border:`1px solid ${T.border}`,borderRadius:9,cursor:'pointer',transition:'border-color .15s,box-shadow .15s'}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=inst?.color||T.accent;e.currentTarget.style.boxShadow=T.shadow;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow='none';}}>
+              <div style={{width:32,height:32,borderRadius:8,background:`${inst?.color||T.accent}18`,border:`1px solid ${inst?.color||T.accent}30`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                {inst&&<inst.Icon size={15} color={inst.color}/>}
+              </div>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:T.text}}>{inst?.name||av.instId}</div>
+                <div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
+                  <div style={{width:6,height:6,borderRadius:'50%',background:tc,flexShrink:0}}/>
+                  <span style={{fontSize:10,color:T.textDim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{av.projName}</span>
+                </div>
+              </div>
+              <div style={{fontSize:10,color:T.textDim}}>
+                {av.submissionDate&&<div>Depus: <strong style={{color:T.text}}>{av.submissionDate}</strong></div>}
+                {av.estimatedDate&&<div style={{color:estDl!==null&&estDl>=0&&estDl<=7?T.amber:T.textDim}}>
+                  Estimat: <strong>{av.estimatedDate}</strong>{estDl!==null&&estDl>=0&&estDl<=7?` (${estDl}z)`:''}</div>}
+              </div>
+              <div style={{fontSize:10}}>
+                {av.emissionDate&&<div style={{color:T.textDim}}>Emis: <strong style={{color:T.text}}>{av.emissionDate}</strong></div>}
+                {av.expiryDate&&<div style={{color:dl!==null&&dl<=30?T.red:T.textDim}}>
+                  Expiră: <strong style={{color:dl!==null&&dl<=30?T.red:T.text}}>{av.expiryDate}</strong>
+                  {dl!==null&&dl<=30&&dl>=0?<span style={{color:T.red,fontWeight:700}}> ⚠{dl}z</span>:''}
+                  {dl!==null&&dl<0?<span style={{color:T.red,fontWeight:700}}> EXPIRAT</span>:''}
+                </div>}
+              </div>
+              <div style={{textAlign:'right'}}>
+                <span style={{fontSize:10,fontWeight:600,color:s.c,background:`${s.c}14`,border:`1px solid ${s.c}33`,borderRadius:5,padding:'3px 8px'}}>{s.l}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /* ─── MAIN APP ───────────────────────────────────────────────────────────────── */
 export default function App(){
   const { user, loading, logout } = useAuth();
@@ -1210,6 +1395,8 @@ export default function App(){
   const [projMenuId, setProjMenuId] = useState(null)
   const [calMonth, setCalMonth] = useState(()=>new Date())
   const [notes, setNotes] = useState([])
+  const [approvedUsers, setApprovedUsers] = useState([])
+  const [chatSeenProjects, setChatSeenProjects] = useState(new Set())
   const ganttRef = useRef(null)
 
   useEffect(()=>{
@@ -1223,6 +1410,16 @@ export default function App(){
     const unsub=listenNotes(user.uid, setNotes);
     return unsub;
   },[user]);
+
+  useEffect(()=>{
+    if(!user) return;
+    const unsub = listenApprovedUsers(setApprovedUsers);
+    return unsub;
+  },[user]);
+
+  useEffect(()=>{
+    if(tab==='chat'&&selId) setChatSeenProjects(s=>new Set([...s,selId]))
+  },[tab,selId])
 
   useEffect(()=>{
     if(!user) { setAccessStatus('checking'); return; }
@@ -1451,9 +1648,12 @@ export default function App(){
           </div>
         )}
         <button onClick={()=>{if(sel){setTab('chat')}else{showToast('Selectează un proiect pentru chat',T.amber)}}}
-          style={{display:"flex",alignItems:"center",justifyContent:"center",background:sel&&tab==='chat'?T.accentBg:"transparent",border:`1px solid ${sel&&tab==='chat'?T.accent:T.border}`,borderRadius:7,width:32,height:32,color:sel&&tab==='chat'?T.accent:T.textMd,cursor:"pointer"}}
+          style={{display:"flex",alignItems:"center",justifyContent:"center",position:'relative',background:sel&&tab==='chat'?T.accentBg:"transparent",border:`1px solid ${sel&&tab==='chat'?T.accent:T.border}`,borderRadius:7,width:32,height:32,color:sel&&tab==='chat'?T.accent:T.textMd,cursor:"pointer"}}
           title="Chat proiect">
           <MessageSquare size={14}/>
+          {sel&&tab!=='chat'&&!chatSeenProjects.has(selId)&&(
+            <span style={{position:'absolute',top:4,right:4,width:7,height:7,borderRadius:'50%',background:T.accent,border:`1.5px solid ${T.sidebar}`}}/>
+          )}
         </button>
         <button onClick={()=>setThemeMode(m=>m==="dark"?"light":m==="light"?"auto":"dark")}
           style={{display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid ${T.border}`,borderRadius:7,width:32,height:32,color:T.textMd,cursor:"pointer"}}
@@ -1636,20 +1836,7 @@ export default function App(){
                   : navSection==='intarziate' ? projects.filter(p=>(p.phases||[]).some(ph=>ph.status!=='approved'&&ph.status!=='rejected'&&diffD(TODAY,ph.endDate)<0))
                   : projects
                 return navSection==='avize' ? (
-                  <div>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Toate avizele</div>
-                    {projects.flatMap(p=>(p.avize||[]).map(av=>({...av,projName:p.name}))).map((av,i)=>{
-                      const inst=INST.find(x=>x.id===av.instId)
-                      return (
-                        <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:T.panel,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
-                          {inst&&<inst.Icon size={14} color={inst.color}/>}
-                          <span style={{flex:1,fontSize:12,color:T.text}}>{inst?.name||av.instId}</span>
-                          <span style={{fontSize:11,color:T.textDim}}>{av.projName}</span>
-                          <span style={{fontSize:11,fontWeight:600,color:STATUS_META[av.status]?.color||T.textDim}}>{STATUS_META[av.status]?.label}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <AvizeDashboard projects={projects} T={T} onNavigate={(projId, tab)=>{setSelId(projId);setTab(tab);}}/>
                 ) : navSection==='financiar' ? (
                   <div>
                     <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Situație financiară</div>
@@ -1723,7 +1910,13 @@ export default function App(){
                       ;(p.phases||[]).forEach(ph=>{
                         if(ph.status!=='approved'&&ph.status!=='rejected'){
                           const d=diffD(TODAY,ph.endDate)
-                          if(d>=0&&d<=7) evs.push({type:'faza',label:ph.name,d,color:'#d29922'})
+                          const recs={
+                            CU:'Pregătiți documentele: schiță amplasament, dovada proprietății, cerere tip.',
+                            Avize:'Contactați instituțiile și solicitați lista exactă de documente necesare.',
+                            PT:'Verificați că toți specialiștii au livrat piesele scrise și desenate.',
+                            AC:'Verificați completitudinea dosarului conform listei de la biroul de urbanism.',
+                          }
+                          if(d>=0&&d<=7) evs.push({type:'faza',label:ph.name,d,color:'#d29922',rec:recs[ph.group]||'Verificați statusul și pregătiți documentele necesare.'})
                         }
                       });
                       ;(p.avize||[]).forEach(av=>{
@@ -1732,7 +1925,7 @@ export default function App(){
                           ;(av.steps||[]).forEach(s=>{
                             if(s.status!=='approved'&&s.date){
                               const d=diffD(TODAY,s.date)
-                              if(d>=0&&d<=7) evs.push({type:'aviz',label:`Aviz ${inst?.short||av.instId}`,d,color:'#58a6ff'})
+                              if(d>=0&&d<=7) evs.push({type:'aviz',label:`Aviz ${inst?.short||av.instId}`,d,color:'#58a6ff',rec:inst?.info||'Pregătiți documentele și depuneți dosarul la instituție.'})
                             }
                           })
                         }
@@ -1748,12 +1941,15 @@ export default function App(){
                           <span style={{fontSize:11,fontWeight:700,color:projEvs[pid].color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{projEvs[pid].name}</span>
                         </div>
                         {projEvs[pid].evs.map((ev,i)=>(
-                          <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0 4px 14px',borderBottom:i<projEvs[pid].evs.length-1?`1px solid ${T.border}33`:'none'}}>
-                            <div style={{width:5,height:5,borderRadius:'50%',background:ev.color,flexShrink:0}}/>
-                            <div style={{flex:1,fontSize:12,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.label}</div>
-                            <div style={{fontSize:10,fontWeight:600,color:ev.d===0?T.red:ev.d<=2?T.amber:T.textMd,flexShrink:0}}>
-                              {ev.d===0?'Azi':ev.d===1?'Mâine':`${ev.d}z`}
+                          <div key={i} style={{padding:'5px 0 5px 14px',borderBottom:i<projEvs[pid].evs.length-1?`1px solid ${T.border}33`:'none'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8}}>
+                              <div style={{width:5,height:5,borderRadius:'50%',background:ev.color,flexShrink:0}}/>
+                              <div style={{flex:1,fontSize:12,color:T.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.label}</div>
+                              <div style={{fontSize:10,fontWeight:600,color:ev.d===0?T.red:ev.d<=2?T.amber:T.textMd,flexShrink:0}}>
+                                {ev.d===0?'Azi':ev.d===1?'Mâine':`${ev.d}z`}
+                              </div>
                             </div>
+                            {ev.rec&&<div style={{fontSize:10,color:T.textDim,marginTop:2,paddingLeft:13,lineHeight:1.4}}>{ev.rec}</div>}
                           </div>
                         ))}
                       </div>
@@ -1844,7 +2040,7 @@ export default function App(){
                   </div>
                 </div>
               )}
-              {tab==="chat"&&<Chat project={sel} T={T} currentUser={CURRENT_USER} showToast={showToast}/>}
+              {tab==="chat"&&<Chat project={sel} T={T} currentUser={CURRENT_USER} showToast={showToast} approvedUsers={approvedUsers}/>}
               {tab==="contract"&&<ContractView project={sel} T={T} onUpdate={(data)=>{
                 if(!user) return
                 updateProject(user.uid,sel.id,data)
