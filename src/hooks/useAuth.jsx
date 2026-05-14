@@ -19,8 +19,12 @@ export function AuthProvider({ children }) {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u)
       if (u) {
-        const prof = await getUserProfile(u.uid)
-        setProfile(prof)
+        try {
+          const prof = await getUserProfile(u.uid)
+          setProfile(prof)
+        } catch {
+          setProfile({})
+        }
       } else {
         setProfile({})
       }
