@@ -1475,6 +1475,109 @@ export default function App(){
         </div>
       </footer>
 
+      {/* Modal editare proiect */}
+      {showEditProj&&editProjData&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200}} onClick={()=>setShowEditProj(false)}>
+          <div style={{background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:14,padding:28,width:420,boxShadow:T.shadowLg}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:18}}>Editează proiect</div>
+            {[['Nume proiect','name'],['Client','client'],['Locație','location']].map(([label,field])=>(
+              <div key={field} style={{marginBottom:12}}>
+                <div style={{fontSize:10,color:T.textDim,marginBottom:4,textTransform:'uppercase',letterSpacing:.6}}>{label}</div>
+                <input value={editProjData[field]||''} onChange={e=>setEditProjData(d=>({...d,[field]:e.target.value}))}
+                  style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:'8px 11px',color:T.text,fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+              </div>
+            ))}
+            <div style={{marginBottom:18}}>
+              <div style={{fontSize:10,color:T.textDim,marginBottom:4,textTransform:'uppercase',letterSpacing:.6}}>Dată start</div>
+              <input type="date" value={editProjData.startDate||''} onChange={e=>setEditProjData(d=>({...d,startDate:e.target.value}))}
+                style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:'8px 11px',color:T.text,fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={()=>setShowEditProj(false)} style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'7px 16px',color:T.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Anulează</button>
+              <button onClick={handleEditProject} style={{background:T.accent,border:'none',borderRadius:7,padding:'7px 18px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Salvează</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal share link */}
+      {showShareModal&&shareTargetProj&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200}} onClick={()=>{setShowShareModal(false);setShareToken(null);}}>
+          <div style={{background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:14,padding:28,width:440,boxShadow:T.shadowLg}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Link share client</div>
+            <div style={{fontSize:12,color:T.textDim,marginBottom:18}}>{shareTargetProj.name}</div>
+            {!shareToken?(
+              <>
+                <div style={{fontSize:11,fontWeight:600,color:T.textMd,marginBottom:10}}>Selectează ce vede clientul:</div>
+                {[['faze','Faze proiect'],['avize','Avize'],['gantt','Grafic Gantt']].map(([key,label])=>(
+                  <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
+                    <input type="checkbox" checked={shareConfig[key]} onChange={e=>setShareConfig(c=>({...c,[key]:e.target.checked}))}/>
+                    <span style={{fontSize:12,color:T.text}}>{label}</span>
+                  </label>
+                ))}
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:18}}>
+                  <button onClick={()=>setShowShareModal(false)} style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'7px 16px',color:T.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Anulează</button>
+                  <button onClick={handleGenerateShare} disabled={shareLoading} style={{background:T.accent,border:'none',borderRadius:7,padding:'7px 18px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
+                    {shareLoading?'Se generează…':'Generează link'}
+                  </button>
+                </div>
+              </>
+            ):(
+              <>
+                <div style={{fontSize:11,color:T.textDim,marginBottom:8}}>Link generat — copiază și trimite clientului:</div>
+                <div style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:7,padding:'10px 12px',fontSize:12,color:T.accent,wordBreak:'break-all',marginBottom:14}}>
+                  {window.location.origin}/?share={shareToken}
+                </div>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                  <button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/?share=${shareToken}`);showToast('Link copiat!',T.green);}}
+                    style={{background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:7,padding:'7px 16px',color:T.accent,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600}}>Copiază</button>
+                  <button onClick={()=>setShowShareModal(false)} style={{background:T.accent,border:'none',borderRadius:7,padding:'7px 16px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Gata</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmare ștergere proiect */}
+      {showDeleteConfirm&&deleteTargetProj&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200}} onClick={()=>setShowDeleteConfirm(false)}>
+          <div style={{background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:14,padding:28,width:380,boxShadow:T.shadowLg}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:8}}>Șterge proiect</div>
+            <div style={{fontSize:13,color:T.textDim,marginBottom:20}}>Ești sigur că vrei să ștergi <strong style={{color:T.text}}>{deleteTargetProj.name}</strong>? Această acțiune nu poate fi anulată.</div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={()=>setShowDeleteConfirm(false)} style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'7px 16px',color:T.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Anulează</button>
+              <button onClick={handleDeleteProject} style={{background:T.red,border:'none',borderRadius:7,padding:'7px 18px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Șterge</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal cereri de acces */}
+      {showRequests&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200}} onClick={()=>setShowRequests(false)}>
+          <div style={{background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:14,padding:28,width:440,maxHeight:'80vh',overflow:'auto',boxShadow:T.shadowLg}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:18}}>Cereri de acces</div>
+            {pendingRequests.length===0&&<div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'20px 0'}}>Nicio cerere în așteptare</div>}
+            {pendingRequests.map(r=>(
+              <div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600,color:T.text}}>{r.name||r.email}</div>
+                  <div style={{fontSize:11,color:T.textDim}}>{r.email}</div>
+                </div>
+                <button onClick={()=>approveAccess(r.email).then(()=>showToast(`${r.email} aprobat`,T.green))}
+                  style={{background:T.greenBg,border:`1px solid ${T.green}44`,borderRadius:6,padding:'5px 12px',color:T.green,fontSize:11,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>Aprobă</button>
+                <button onClick={()=>rejectAccess(r.email).then(()=>showToast(`${r.email} respins`,T.red))}
+                  style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:6,padding:'5px 12px',color:T.red,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>Respinge</button>
+              </div>
+            ))}
+            <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}>
+              <button onClick={()=>setShowRequests(false)} style={{background:T.accent,border:'none',borderRadius:7,padding:'7px 18px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Închide</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal proiect nou */}
       {showNewProj&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}} onClick={()=>setShowNewProj(false)}>
