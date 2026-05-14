@@ -11,7 +11,6 @@ import { useAuth } from './hooks/useAuth.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, createShareLink, getSharedProject } from './lib/db.js'
 import { sendMentionEmail } from './lib/emailService.js'
-import { uploadFile } from './lib/uploadService.js'
 
 /* ─── THEME ─────────────────────────────────────────────────────────────────── */
 const DARK = {
@@ -673,9 +672,11 @@ const Chat=({project,T,currentUser,showToast})=>{
 };
 
 /* ─── PHASES VIEW ────────────────────────────────────────────────────────────── */
-const PhasesView=({project,onUpdate,onUpload,T})=>{
+const PhasesView=({project,onUpdate,T})=>{
   const [openPh,setOpenPh]=useState(null);
-  const [uploading,setUploading]=useState(null);
+  const [addingLink,setAddingLink]=useState(null);
+  const [linkUrl,setLinkUrl]=useState('');
+  const [linkName,setLinkName]=useState('');
   const cols="12px 1fr 76px 76px 130px 62px 44px";
   return(
     <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -714,28 +715,39 @@ const PhasesView=({project,onUpdate,onUpload,T})=>{
             </div>
             {isOpen&&(
               <div style={{padding:"10px 36px 14px",borderBottom:`1px solid ${T.border}`,background:T.panelHov}}>
-                <div style={{fontSize:10,fontWeight:600,color:T.textDim,textTransform:"uppercase",letterSpacing:.7,marginBottom:7,display:"flex",alignItems:"center",gap:5}}><Paperclip size={11}/>Documente fază</div>
+                <div style={{fontSize:10,fontWeight:600,color:T.textDim,textTransform:"uppercase",letterSpacing:.7,marginBottom:7,display:"flex",alignItems:"center",gap:5}}><Link2 size={11}/>Documente (linkuri cloud)</div>
                 {(ph.attachments||[]).map(att=>(
                   <div key={att.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 10px",background:T.bg,borderRadius:6,border:`1px solid ${T.border}`,marginBottom:4}}>
                     <FileText size={12} color={T.textMd}/>
-                    <a href={att.url} style={{flex:1,fontSize:11,color:T.blue,textDecoration:"none"}}>{att.name}</a>
-                    <span style={{fontSize:10,color:T.textDim}}>{att.uploadedAt}</span>
+                    <a href={att.url} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:T.blue,textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{att.name||att.url}</a>
+                    <button onClick={()=>onUpdate(ph.phaseId,{attachments:(ph.attachments||[]).filter(a=>a.id!==att.id)})}
+                      style={{background:"transparent",border:"none",color:T.textDim,cursor:"pointer",padding:2,display:"flex",alignItems:"center",flexShrink:0}}>
+                      <X size={12}/>
+                    </button>
                   </div>
                 ))}
-                <label style={{display:"inline-flex",alignItems:"center",gap:5,background:uploading===ph.phaseId?T.border:T.accentBg,border:`1px solid ${T.accent}44`,color:T.accentLt,borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:600,cursor:uploading===ph.phaseId?"not-allowed":"pointer",fontFamily:"inherit"}}>
-                  <Upload size={11}/>{uploading===ph.phaseId?"Se încarcă…":"Încarcă document"}
-                  <input type="file" style={{display:"none"}} disabled={!!uploading}
-                    onChange={async e=>{
-                      const file=e.target.files[0]; if(!file) return
-                      setUploading(ph.phaseId)
-                      try {
-                        const res = await onUpload(file, ph.phaseId)
-                        onUpdate(ph.phaseId,{attachments:[...(ph.attachments||[]),{id:uid(),name:res.name,url:res.url,size:res.size,uploadedAt:TODAY}]})
-                      } catch(err) { console.error(err) }
-                      setUploading(null)
-                      e.target.value=''
-                    }}/>
-                </label>
+                {addingLink===ph.phaseId?(
+                  <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6}}>
+                    <input value={linkName} onChange={e=>setLinkName(e.target.value)} placeholder="Nume document (ex: Plan parter v2)"
+                      style={{background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:"5px 9px",color:T.text,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+                    <input value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="Link Google Drive / Dropbox / OneDrive…"
+                      style={{background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:"5px 9px",color:T.text,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>{
+                        if(!linkUrl.trim()) return
+                        onUpdate(ph.phaseId,{attachments:[...(ph.attachments||[]),{id:uid(),name:linkName.trim()||linkUrl,url:linkUrl.trim(),addedAt:TODAY}]})
+                        setLinkUrl('');setLinkName('');setAddingLink(null)
+                      }} style={{background:T.accent,border:"none",borderRadius:6,padding:"5px 12px",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Salvează</button>
+                      <button onClick={()=>{setAddingLink(null);setLinkUrl('');setLinkName('');}}
+                        style={{background:"transparent",border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 10px",color:T.textMd,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Anulează</button>
+                    </div>
+                  </div>
+                ):(
+                  <button onClick={()=>setAddingLink(ph.phaseId)}
+                    style={{display:"inline-flex",alignItems:"center",gap:5,background:T.accentBg,border:`1px solid ${T.accent}44`,color:T.accentLt,borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:4}}>
+                    <Plus size={11}/>Adaugă link document
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1446,8 +1458,7 @@ export default function App(){
                 </div>
               </div>
 
-              {tab==="faze"&&<PhasesView project={sel} onUpdate={(phId,data)=>updPhase(sel.id,phId,data)} T={T}
-                onUpload={(file,phaseId)=>uploadFile(file,user.uid,sel.id,phaseId)}/>}
+              {tab==="faze"&&<PhasesView project={sel} onUpdate={(phId,data)=>updPhase(sel.id,phId,data)} T={T}/>}
               {tab==="avize"&&<AvizeView project={sel} onUpdate={(avId,data)=>updAviz(sel.id,avId,data)} T={T}/>}
               {tab==="gantt"&&(
                 <div style={{background:T.panel,borderRadius:10,padding:20,border:`1px solid ${T.border}`}}>
