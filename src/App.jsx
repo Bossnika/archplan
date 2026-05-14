@@ -5,11 +5,11 @@ import {
   Download, Upload, Link2, ExternalLink, X, Calendar, Map, Settings,
   PanelLeftClose, PanelLeftOpen, LogOut, MessageSquare, Send, Paperclip,
   AtSign, Hash, Users, UserPlus, Trash2, CheckSquare, Zap, Flame,
-  Droplets, Radio, Leaf, ChevronDown
+  Droplets, Radio, Leaf, ChevronDown, MoreVertical
 } from "lucide-react";
 import { useAuth } from './hooks/useAuth.jsx'
 import LoginPage from './pages/LoginPage.jsx'
-import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg } from './lib/db.js'
+import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, createShareLink, getSharedProject } from './lib/db.js'
 import { sendMentionEmail } from './lib/emailService.js'
 
 /* ─── THEME ─────────────────────────────────────────────────────────────────── */
@@ -258,6 +258,77 @@ const MultiProg=({phases,T})=>{
     </div>
   );
 };
+
+/* ─── SHARED PROJECT VIEW ────────────────────────────────────────────────────── */
+const SharedView = ({ token }) => {
+  const [data, setData] = useState(null)
+  const [err,  setErr]  = useState(false)
+  const T = DARK
+
+  useEffect(() => {
+    getSharedProject(token).then(r => { if (r) setData(r); else setErr(true) })
+  }, [token])
+
+  if (err) return (
+    <div style={{minHeight:'100vh',background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12}}>
+      <div style={{color:T.red,fontSize:14,fontWeight:600}}>Link invalid sau expirat.</div>
+    </div>
+  )
+  if (!data) return (
+    <div style={{minHeight:'100vh',background:T.bg,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{color:T.textDim,fontSize:13}}>Se încarcă…</div>
+    </div>
+  )
+  const { project: p, config } = data
+  const phases = p.phases || []
+  const avize  = p.avize  || []
+  return (
+    <div style={{minHeight:'100vh',background:T.bg,color:T.text,fontFamily:"'Geist','Helvetica Neue',sans-serif",padding:'0 0 40px'}}>
+      <style>{`*{box-sizing:border-box;}body{margin:0;}`}</style>
+      <header style={{background:T.sidebar,borderBottom:`1px solid ${T.border}`,padding:'14px 28px',display:'flex',alignItems:'center',gap:12}}>
+        <div style={{width:26,height:26,borderRadius:7,background:`linear-gradient(135deg,${T.accent},${T.purple})`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </div>
+        <span style={{fontSize:14,fontWeight:700,color:T.text}}>ArchPlan</span>
+        <span style={{fontSize:11,color:T.textDim,marginLeft:4}}>— Vizualizare proiect</span>
+      </header>
+      <div style={{maxWidth:900,margin:'32px auto',padding:'0 20px'}}>
+        <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:'0 0 6px'}}>{p.name}</h1>
+        <div style={{fontSize:12,color:T.textDim,marginBottom:28,display:'flex',gap:16}}>
+          {p.client&&<span>Client: {p.client}</span>}
+          {p.location&&<span>Locație: {p.location}</span>}
+        </div>
+        {config.faze && (
+          <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:20,marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:14}}>Faze proiect</div>
+            {phases.map(ph => (
+              <div key={ph.phaseId} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
+                <div style={{flex:1,fontSize:13,color:T.text}}>{ph.name}</div>
+                <div style={{fontSize:11,color:T.textDim}}>{ph.startDate} → {ph.endDate}</div>
+                <div style={{fontSize:11,fontWeight:600,color:STATUS_META[ph.status]?.color||T.textDim}}>{STATUS_META[ph.status]?.label||ph.status}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {config.avize && (
+          <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:20,marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:14}}>Avize</div>
+            {avize.map(av => {
+              const inst = INST.find(i=>i.id===av.instId)
+              return (
+                <div key={av.avizId} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
+                  <div style={{flex:1,fontSize:13,color:T.text}}>{inst?.name||av.instId}</div>
+                  {av.dosarNr&&<div style={{fontSize:11,color:T.textDim}}>Dosar: {av.dosarNr}</div>}
+                  <div style={{fontSize:11,fontWeight:600,color:STATUS_META[av.status]?.color||T.textDim}}>{STATUS_META[av.status]?.label||av.status}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 /* ─── CHAT COMPONENT ─────────────────────────────────────────────────────────── */
 const Chat=({project,T,currentUser,showToast})=>{
@@ -727,15 +798,187 @@ const AvizeView=({project,onUpdate,T})=>{
 
 /* ─── TABS ───────────────────────────────────────────────────────────────────── */
 const TABS=[
-  {id:"faze",    label:"Faze",     I:Layers},
-  {id:"avize",   label:"Avize",    I:Building2},
-  {id:"gantt",   label:"Timeline", I:BarChart2},
-  {id:"chat",    label:"Chat",     I:MessageSquare},
+  {id:"faze",     label:"Faze",     I:Layers},
+  {id:"avize",    label:"Avize",    I:Building2},
+  {id:"gantt",    label:"Timeline", I:BarChart2},
+  {id:"chat",     label:"Chat",     I:MessageSquare},
+  {id:"contract", label:"Contract", I:FileText},
 ];
+
+/* ─── CONTRACT VIEW ─────────────────────────────────────────────────────────── */
+const ContractView = ({project, onUpdate, T}) => {
+  const c = project.contract || {}
+  const facturi = project.facturi || []
+  const [showAddF, setShowAddF] = useState(false)
+  const [newF, setNewF] = useState({nr:'',data:'',suma:'',status:'emisa'})
+  const inp = {background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:'7px 10px',color:T.text,fontSize:12,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'}
+  const upd = (field, val) => onUpdate({contract:{...c,[field]:val}})
+  const addFactura = () => {
+    if(!newF.nr||!newF.suma) return
+    onUpdate({facturi:[...facturi,{...newF,id:Math.random().toString(36).slice(2)}]})
+    setNewF({nr:'',data:'',suma:'',status:'emisa'})
+    setShowAddF(false)
+  }
+  const delFactura = (id) => onUpdate({facturi:facturi.filter(f=>f.id!==id)})
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+      {/* Contract info */}
+      <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:20}}>
+        <div style={{fontSize:11,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:16}}>Date contract</div>
+        {[['Nr. contract','nr'],['Data contract','dataContract'],['Valoare totală (RON)','valoare'],['Termen plată','termenPlata'],['Observații','obs']].map(([label,field])=>(
+          <div key={field} style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:T.textDim,marginBottom:4,textTransform:'uppercase',letterSpacing:.5}}>{label}</div>
+            {field==='obs'
+              ? <textarea value={c[field]||''} onChange={e=>upd(field,e.target.value)} rows={3} style={{...inp,resize:'vertical'}}/>
+              : <input value={c[field]||''} onChange={e=>upd(field,e.target.value)} style={inp}/>
+            }
+          </div>
+        ))}
+      </div>
+      {/* Invoices */}
+      <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:20}}>
+        <div style={{display:'flex',alignItems:'center',marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,flex:1}}>Facturi</div>
+          <button onClick={()=>setShowAddF(s=>!s)} style={{background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:6,padding:'4px 10px',color:T.accent,fontSize:11,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+            <Plus size={11}/>Adaugă
+          </button>
+        </div>
+        {showAddF&&(
+          <div style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:12,marginBottom:12}}>
+            {[['Nr. factură','nr'],['Data','data'],['Sumă (RON)','suma']].map(([label,field])=>(
+              <div key={field} style={{marginBottom:8}}>
+                <div style={{fontSize:9,color:T.textDim,marginBottom:3,textTransform:'uppercase',letterSpacing:.5}}>{label}</div>
+                <input value={newF[field]} onChange={e=>setNewF(f=>({...f,[field]:e.target.value}))} style={inp}/>
+              </div>
+            ))}
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:9,color:T.textDim,marginBottom:3,textTransform:'uppercase',letterSpacing:.5}}>Status</div>
+              <select value={newF.status} onChange={e=>setNewF(f=>({...f,status:e.target.value}))} style={inp}>
+                <option value="emisa">Emisă</option>
+                <option value="incasata">Încasată</option>
+                <option value="restanta">Restantă</option>
+              </select>
+            </div>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={addFactura} style={{flex:1,background:T.accent,border:'none',borderRadius:6,padding:'6px',color:'#fff',fontSize:11,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>Salvează</button>
+              <button onClick={()=>setShowAddF(false)} style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:6,padding:'6px 10px',color:T.textMd,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>Anulează</button>
+            </div>
+          </div>
+        )}
+        {facturi.length===0&&!showAddF&&<div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'20px 0'}}>Nicio factură adăugată</div>}
+        {facturi.map(f=>(
+          <div key={f.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:600,color:T.text}}>Factura #{f.nr}</div>
+              <div style={{fontSize:10,color:T.textDim}}>{f.data} · {f.suma} RON</div>
+            </div>
+            <div style={{fontSize:10,fontWeight:600,color:f.status==='incasata'?T.green:f.status==='restanta'?T.red:T.amber,background:f.status==='incasata'?T.greenBg:f.status==='restanta'?T.redBg:T.amberBg,borderRadius:4,padding:'2px 7px'}}>
+              {f.status==='incasata'?'Încasată':f.status==='restanta'?'Restantă':'Emisă'}
+            </div>
+            <button onClick={()=>delFactura(f.id)} style={{background:'transparent',border:'none',color:T.textDim,cursor:'pointer',padding:2,display:'flex',alignItems:'center'}}>
+              <Trash2 size={12}/>
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ─── CALENDAR ──────────────────────────────────────────────────────────────── */
+const CalendarWidget = ({projects, T, month, onPrev, onNext}) => {
+  const year  = month.getFullYear()
+  const mon   = month.getMonth()
+  const first = new Date(year, mon, 1).getDay() // 0=Sun
+  const days  = new Date(year, mon+1, 0).getDate()
+  const start = first === 0 ? 6 : first - 1 // Mon-start
+
+  // Collect events per day
+  const events = {}
+  const addEv = (dateStr, label, color, projName) => {
+    if(!dateStr) return
+    const d = dateStr.slice(8,10).replace(/^0/,'')
+    const m = parseInt(dateStr.slice(5,7))-1
+    const y = parseInt(dateStr.slice(0,4))
+    if(y===year && m===mon) {
+      if(!events[d]) events[d]=[]
+      events[d].push({label, color, projName})
+    }
+  }
+  projects.forEach(p=>{
+    (p.phases||[]).forEach(ph=>{
+      if(ph.status!=='approved') addEv(ph.endDate, ph.name, '#d29922', p.name)
+    });
+    (p.avize||[]).forEach(av=>{
+      if(av.status!=='approved')(av.steps||[]).forEach(s=>{
+        if(s.status!=='approved') addEv(s.date, `Aviz`, '#58a6ff', p.name)
+      })
+    })
+  })
+
+  const todayD   = new Date().getDate()
+  const todayM   = new Date().getMonth()
+  const todayY   = new Date().getFullYear()
+  const isToday  = (d) => d==todayD && mon==todayM && year==todayY
+
+  const mNames = ['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie','Iulie','August','Septembrie','Octombrie','Noiembrie','Decembrie']
+  const dNames = ['Lu','Ma','Mi','Jo','Vi','Sâ','Du']
+
+  const [selDay, setSelDay] = useState(null)
+
+  return (
+    <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+      <div style={{display:'flex',alignItems:'center',marginBottom:12}}>
+        <button onClick={onPrev} style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.textMd,flexShrink:0}}>‹</button>
+        <div style={{flex:1,textAlign:'center',fontSize:13,fontWeight:700,color:T.text}}>{mNames[mon]} {year}</div>
+        <button onClick={onNext} style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.textMd,flexShrink:0}}>›</button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+        {dNames.map(d=><div key={d} style={{textAlign:'center',fontSize:9,fontWeight:700,color:T.textDim,textTransform:'uppercase',padding:'4px 0'}}>{d}</div>)}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+        {Array.from({length:start}).map((_,i)=><div key={`e${i}`}/>)}
+        {Array.from({length:days}).map((_,i)=>{
+          const d = i+1
+          const evs = events[String(d)]||[]
+          const today = isToday(d)
+          const sel = selDay===d
+          return (
+            <div key={d} onClick={()=>setSelDay(sel?null:d)}
+              style={{borderRadius:6,padding:'4px 2px',minHeight:36,cursor:evs.length?'pointer':'default',background:today?`${T.accent}18`:sel?T.panelHov:'transparent',border:`1px solid ${today?T.accent:sel?T.borderLt:'transparent'}`,position:'relative'}}>
+              <div style={{textAlign:'center',fontSize:11,fontWeight:today?700:400,color:today?T.accent:T.text,marginBottom:2}}>{d}</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:1,justifyContent:'center'}}>
+                {evs.slice(0,3).map((ev,j)=>(
+                  <div key={j} style={{width:5,height:5,borderRadius:'50%',background:ev.color}}/>
+                ))}
+                {evs.length>3&&<div style={{width:5,height:5,borderRadius:'50%',background:T.textDim}}/>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {selDay && events[String(selDay)]?.length>0 && (
+        <div style={{marginTop:12,background:T.bg,borderRadius:8,padding:10,border:`1px solid ${T.border}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>{selDay} {mNames[mon]}</div>
+          {events[String(selDay)].map((ev,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0',borderBottom:i<events[String(selDay)].length-1?`1px solid ${T.border}`:'none'}}>
+              <div style={{width:7,height:7,borderRadius:'50%',background:ev.color,flexShrink:0}}/>
+              <div style={{fontSize:11,color:T.text,flex:1}}>{ev.label}</div>
+              <div style={{fontSize:10,color:T.textDim}}>{ev.projName}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /* ─── MAIN APP ───────────────────────────────────────────────────────────────── */
 export default function App(){
   const { user, loading, logout } = useAuth();
+  const [accessStatus, setAccessStatus] = useState('checking')
+  const [pendingRequests, setPendingRequests] = useState([])
+  const [showRequests, setShowRequests] = useState(false)
   const [themeMode,setThemeMode]=useState("dark");
   const sysDark=window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   const T=themeMode==="dark"||(themeMode==="auto"&&sysDark)?DARK:LIGHT;
@@ -760,12 +1003,43 @@ export default function App(){
   const [newProjClient,setNewProjClient]=useState("");
   const [newProjLoc,setNewProjLoc]=useState("");
   const [newProjStart,setNewProjStart]=useState(TODAY);
+  const [showEditProj, setShowEditProj] = useState(false)
+  const [editProjData, setEditProjData] = useState(null)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [shareTargetProj, setShareTargetProj] = useState(null)
+  const [shareConfig, setShareConfig] = useState({faze:true,avize:true,gantt:false})
+  const [shareToken, setShareToken] = useState(null)
+  const [shareLoading, setShareLoading] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteTargetProj, setDeleteTargetProj] = useState(null)
+  const [projMenuId, setProjMenuId] = useState(null)
+  const [calMonth, setCalMonth] = useState(()=>new Date())
 
   useEffect(()=>{
     if(!user) return;
     const unsub=listenProjects(user.uid, setProjects);
     return unsub;
   },[user]);
+
+  useEffect(()=>{
+    if(!user) { setAccessStatus('checking'); return; }
+    checkAccess(user.email).then(async status => {
+      if(status === 'first_user') {
+        await initAccessControl(user.email)
+        setAccessStatus('approved')
+      } else if(status === 'approved') {
+        setAccessStatus('approved')
+      } else {
+        setAccessStatus('not_approved')
+      }
+    })
+  },[user])
+
+  useEffect(()=>{
+    if(accessStatus !== 'approved' || !user) return
+    const unsub = listenPendingRequests(setPendingRequests)
+    return unsub
+  },[accessStatus, user])
 
   const showToast=useCallback((msg,c)=>{setToast({msg,c:c||T.green});setTimeout(()=>setToast(null),3500);},[T]);
 
@@ -807,6 +1081,35 @@ export default function App(){
     showToast(`Proiect "${newProj.name}" creat`,T.green);
   };
 
+  const handleEditProject = async () => {
+    if(!editProjData||!user) return
+    await updateProject(user.uid, editProjData.id, {
+      name: editProjData.name,
+      client: editProjData.client,
+      location: editProjData.location,
+      startDate: editProjData.startDate,
+    })
+    setShowEditProj(false)
+    showToast('Proiect actualizat', T.green)
+  }
+
+  const handleDeleteProject = async () => {
+    if(!deleteTargetProj||!user) return
+    await deleteProject(user.uid, deleteTargetProj.id)
+    if(selId === deleteTargetProj.id) setSelId(null)
+    setShowDeleteConfirm(false)
+    setDeleteTargetProj(null)
+    showToast('Proiect șters', T.red)
+  }
+
+  const handleGenerateShare = async () => {
+    if(!shareTargetProj||!user) return
+    setShareLoading(true)
+    const token = await createShareLink(user.uid, shareTargetProj.id, shareConfig)
+    setShareToken(token)
+    setShareLoading(false)
+  }
+
   const themeIcon=themeMode==="dark"?<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>:themeMode==="light"?<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>:<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>;
 
   const css=`
@@ -826,6 +1129,9 @@ export default function App(){
     textarea{scrollbar-width:thin;}
   `;
 
+  const urlShare = new URLSearchParams(window.location.search).get('share')
+  if(urlShare) return <SharedView token={urlShare}/>
+
   if(loading) return(
     <div style={{minHeight:"100vh",background:DARK.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{color:DARK.textDim,fontSize:13}}>Se încarcă…</div>
@@ -833,6 +1139,34 @@ export default function App(){
   );
 
   if(!user) return <LoginPage T={T} />;
+
+  if(accessStatus === 'checking') return (
+    <div style={{minHeight:'100vh',background:DARK.bg,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{color:DARK.textDim,fontSize:13}}>Verificare acces…</div>
+    </div>
+  );
+
+  if(accessStatus === 'not_approved') return (
+    <div style={{minHeight:'100vh',background:DARK.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,padding:24}}>
+      <div style={{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#0969da,#8250df)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontSize:18,fontWeight:700,color:DARK.text,marginBottom:8}}>Acces în așteptare</div>
+        <div style={{fontSize:13,color:DARK.textDim,maxWidth:360,lineHeight:1.6}}>
+          Cererea ta de acces a fost trimisă. Vei primi un email de confirmare după aprobare.<br/>
+          Cont: <strong style={{color:DARK.text}}>{user.email}</strong>
+        </div>
+      </div>
+      <button onClick={async()=>{ await requestAccess(user.email, user.displayName||user.email); logout(); }}
+        style={{background:DARK.accent,border:'none',borderRadius:8,padding:'10px 22px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>
+        Trimite cerere de acces
+      </button>
+      <button onClick={logout} style={{background:'transparent',border:`1px solid ${DARK.border}`,borderRadius:8,padding:'8px 18px',color:DARK.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
+        Deconectare
+      </button>
+    </div>
+  );
 
   return(
     <div style={{fontFamily:"'Geist','Helvetica Neue',sans-serif",background:T.bg,height:"100vh",color:T.text,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -864,6 +1198,14 @@ export default function App(){
         <button onClick={()=>setShowNewProj(true)} style={{display:"flex",alignItems:"center",gap:5,background:T.accent,border:"none",borderRadius:7,padding:"6px 13px",color:"#fff",fontWeight:600,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>
           <Plus size={13}/>Proiect nou
         </button>
+        {pendingRequests.length>0&&(
+          <button onClick={()=>setShowRequests(true)}
+            style={{position:'relative',background:T.amberBg,border:`1px solid ${T.amber}44`,borderRadius:7,padding:'5px 10px',color:T.amber,cursor:'pointer',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:5,fontFamily:'inherit'}}>
+            <Users size={12}/>
+            {pendingRequests.length} cerere{pendingRequests.length>1?'i':''}
+            <span style={{position:'absolute',top:-4,right:-4,width:8,height:8,borderRadius:'50%',background:T.red}}/>
+          </button>
+        )}
         {/* User avatar */}
         <div style={{position:"relative",flexShrink:0}}>
           <div onClick={()=>setUMenu(s=>!s)} style={{cursor:"pointer"}}>
@@ -916,13 +1258,34 @@ export default function App(){
               );
               return(
                 <div key={p.id} onClick={()=>{setSelId(p.id);setShowRem(false);}}
-                  style={{padding:"10px 12px",borderRadius:8,margin:"1px 6px",cursor:"pointer",background:selId===p.id&&!showRem?`${T.accent}14`:"transparent",borderLeft:`2px solid ${selId===p.id&&!showRem?T.accent:"transparent"}`,transition:"background .12s"}}
+                  style={{padding:"10px 12px",borderRadius:8,margin:"1px 6px",cursor:"pointer",background:selId===p.id&&!showRem?`${T.accent}14`:"transparent",borderLeft:`2px solid ${selId===p.id&&!showRem?T.accent:"transparent"}`,transition:"background .12s",position:'relative'}}
                   onMouseEnter={e=>{if(!(selId===p.id&&!showRem))e.currentTarget.style.background=T.panelHov}}
                   onMouseLeave={e=>{e.currentTarget.style.background=selId===p.id&&!showRem?`${T.accent}14`:"transparent"}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                     <div style={{fontSize:12,fontWeight:selId===p.id&&!showRem?600:500,color:selId===p.id&&!showRem?T.text:T.textMd,flex:1,paddingRight:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
                     <span style={{fontSize:10,fontWeight:700,color:ov?T.red:pc===100?T.green:T.textDim,flexShrink:0}}>{pc}%</span>
+                    <button onClick={e=>{e.stopPropagation();setProjMenuId(projMenuId===p.id?null:p.id);}}
+                      style={{background:'transparent',border:'none',color:T.textDim,cursor:'pointer',padding:2,display:'flex',alignItems:'center',flexShrink:0,borderRadius:4,opacity:.6}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity='1'} onMouseLeave={e=>e.currentTarget.style.opacity='.6'}>
+                      <MoreVertical size={13}/>
+                    </button>
                   </div>
+                  {projMenuId===p.id&&(
+                    <div style={{position:'absolute',right:8,top:36,background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:8,padding:4,minWidth:160,boxShadow:T.shadowLg,zIndex:200}} onClick={e=>e.stopPropagation()}>
+                      <button onClick={()=>{setEditProjData({...p});setShowEditProj(true);setProjMenuId(null);}}
+                        style={{width:'100%',background:'transparent',border:'none',padding:'7px 10px',color:T.text,cursor:'pointer',fontSize:12,textAlign:'left',borderRadius:5,fontFamily:'inherit',display:'flex',alignItems:'center',gap:7}}>
+                        <Settings size={12}/>Editează proiect
+                      </button>
+                      <button onClick={()=>{setShareTargetProj(p);setShareToken(null);setShareConfig({faze:true,avize:true,gantt:false});setShowShareModal(true);setProjMenuId(null);}}
+                        style={{width:'100%',background:'transparent',border:'none',padding:'7px 10px',color:T.text,cursor:'pointer',fontSize:12,textAlign:'left',borderRadius:5,fontFamily:'inherit',display:'flex',alignItems:'center',gap:7}}>
+                        <Link2 size={12}/>Link share client
+                      </button>
+                      <button onClick={()=>{setDeleteTargetProj(p);setShowDeleteConfirm(true);setProjMenuId(null);}}
+                        style={{width:'100%',background:'transparent',border:'none',padding:'7px 10px',color:T.red,cursor:'pointer',fontSize:12,textAlign:'left',borderRadius:5,fontFamily:'inherit',display:'flex',alignItems:'center',gap:7}}>
+                        <Trash2 size={12}/>Șterge proiect
+                      </button>
+                    </div>
+                  )}
                   {p.client&&<div style={{fontSize:10,color:T.textDim,marginBottom:3,display:"flex",alignItems:"center",gap:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><User size={9}/>{p.client}</div>}
                   {/* Member avatars */}
                   <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:5}}>
@@ -988,6 +1351,51 @@ export default function App(){
                   );
                 })}
               </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,marginTop:20}}>
+                <CalendarWidget projects={projects} T={T} month={calMonth}
+                  onPrev={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()-1,1))}
+                  onNext={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()+1,1))}/>
+                {/* Today's events */}
+                <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:12}}>Azi — {fmt(TODAY)}</div>
+                  {(()=>{
+                    const evs=[]
+                    projects.forEach(p=>{
+                      (p.phases||[]).forEach(ph=>{
+                        if(ph.status!=='approved'&&ph.status!=='rejected'){
+                          const d=diffD(TODAY,ph.endDate)
+                          if(d>=0&&d<=7) evs.push({type:'faza',label:ph.name,proj:p.name,d,color:'#d29922'})
+                        }
+                      });
+                      (p.avize||[]).forEach(av=>{
+                        if(av.status!=='approved'){
+                          const inst=INST.find(i=>i.id===av.instId)
+                          ;(av.steps||[]).forEach(s=>{
+                            if(s.status!=='approved'&&s.date){
+                              const d=diffD(TODAY,s.date)
+                              if(d>=0&&d<=7) evs.push({type:'aviz',label:`Aviz ${inst?.short||''}`,proj:p.name,d,color:'#58a6ff'})
+                            }
+                          })
+                        }
+                      })
+                    })
+                    evs.sort((a,b)=>a.d-b.d)
+                    if(evs.length===0) return <div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'20px 0'}}>Niciun termen în următoarele 7 zile 🎉</div>
+                    return evs.map((ev,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'7px 0',borderBottom:i<evs.length-1?`1px solid ${T.border}`:'none'}}>
+                        <div style={{width:7,height:7,borderRadius:'50%',background:ev.color,marginTop:4,flexShrink:0}}/>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,color:T.text,fontWeight:500}}>{ev.label}</div>
+                          <div style={{fontSize:10,color:T.textDim}}>{ev.proj}</div>
+                        </div>
+                        <div style={{fontSize:10,fontWeight:600,color:ev.d===0?T.red:ev.d<=2?T.amber:T.textMd,flexShrink:0}}>
+                          {ev.d===0?'Azi':ev.d===1?'Mâine':`${ev.d}z`}
+                        </div>
+                      </div>
+                    ))
+                  })()}
+                </div>
+              </div>
             </div>
           ):(
             /* Project detail */
@@ -1039,6 +1447,11 @@ export default function App(){
                 </div>
               )}
               {tab==="chat"&&<Chat project={sel} T={T} currentUser={CURRENT_USER} showToast={showToast}/>}
+              {tab==="contract"&&<ContractView project={sel} T={T} onUpdate={(data)=>{
+                if(!user) return
+                updateProject(user.uid,sel.id,data)
+                setProjects(ps=>ps.map(p=>p.id!==sel.id?p:{...p,...data}))
+              }}/>}
             </div>
           )}
         </main>

@@ -1,7 +1,7 @@
 // src/lib/db.js  — Firestore CRUD + real-time listeners
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, query, where, orderBy, serverTimestamp, getDoc, setDoc
+  onSnapshot, query, where, orderBy, serverTimestamp, getDoc, setDoc, arrayUnion
 } from 'firebase/firestore'
 import { db } from './firebase.js'
 
@@ -37,7 +37,7 @@ export const updateReminder = (uid, remId, data) =>
 export const deleteReminder = (uid, remId) =>
   deleteDoc(doc(db, 'users', uid, 'reminders', remId))
 
-// ── USER PROFILE (push token, theme, Drive folder) ────────────────────────────
+// ── USER PROFILE ──────────────────────────────────────────────────────────────
 export const getUserProfile = async (uid) => {
   const snap = await getDoc(doc(db, 'users', uid, 'profile', 'main'))
   return snap.exists() ? snap.data() : {}
@@ -75,3 +75,54 @@ export const addMember = (uid, projectId, data) =>
 
 export const removeMember = (uid, projectId, memberId) =>
   deleteDoc(doc(db, 'users', uid, 'projects', projectId, 'members', memberId))
+
+// ── ACCESS CONTROL ────────────────────────────────────────────────────────────
+const accessRef = doc(db, 'settings', 'accessControl')
+
+export const checkAccess = async (email) => {
+  const snap = await getDoc(accessRef)
+  if (!snap.exists()) return 'first_user'
+  const { approvedEmails = [] } = snap.data()
+  return approvedEmails.includes(email) ? 'approved' : 'not_approved'
+}
+
+export const initAccessControl = (ownerEmail) =>
+  setDoc(accessRef, { approvedEmails: [ownerEmail], ownerEmail }, { merge: true })
+
+export const requestAccess = (email, name) =>
+  setDoc(doc(db, 'accessRequests', email.replace(/[@.]/g, '_')), {
+    email, name, requestedAt: serverTimestamp(), status: 'pending'
+  })
+
+export const approveAccess = async (email) => {
+  await updateDoc(accessRef, { approvedEmails: arrayUnion(email) })
+  await updateDoc(doc(db, 'accessRequests', email.replace(/[@.]/g, '_')), { status: 'approved' })
+}
+
+export const rejectAccess = (email) =>
+  updateDoc(doc(db, 'accessRequests', email.replace(/[@.]/g, '_')), { status: 'rejected' })
+
+export const listenPendingRequests = (cb) =>
+  onSnapshot(query(collection(db, 'accessRequests'), where('status', '==', 'pending')), snap =>
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+
+// ── SHARE LINKS ───────────────────────────────────────────────────────────────
+export const createShareLink = async (ownerUid, projectId, config) => {
+  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+  await setDoc(doc(db, 'sharedProjects', token), {
+    ownerUid, projectId, config, createdAt: serverTimestamp()
+  })
+  return token
+}
+
+export const getSharedProject = async (token) => {
+  const snap = await getDoc(doc(db, 'sharedProjects', token))
+  if (!snap.exists()) return null
+  const { ownerUid, projectId, config } = snap.data()
+  const projSnap = await getDoc(doc(db, 'users', ownerUid, 'projects', projectId))
+  if (!projSnap.exists()) return null
+  return { project: { id: projSnap.id, ...projSnap.data() }, config }
+}
+
+export const deleteShareLink = (token) =>
+  deleteDoc(doc(db, 'sharedProjects', token))
