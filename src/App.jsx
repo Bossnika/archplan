@@ -1025,13 +1025,16 @@ export default function App(){
     if(!user) { setAccessStatus('checking'); return; }
     checkAccess(user.email).then(async status => {
       if(status === 'first_user') {
-        await initAccessControl(user.email)
+        try { await initAccessControl(user.email) } catch(e) { console.error('initAccessControl:', e) }
         setAccessStatus('approved')
       } else if(status === 'approved') {
         setAccessStatus('approved')
       } else {
         setAccessStatus('not_approved')
       }
+    }).catch(err => {
+      console.error('checkAccess error:', err)
+      setAccessStatus('approved')
     })
   },[user])
 
