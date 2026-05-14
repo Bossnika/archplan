@@ -1349,9 +1349,6 @@ export default function App(){
                 })}
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,marginTop:20}}>
-                <CalendarWidget projects={projects} T={T} month={calMonth}
-                  onPrev={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()-1,1))}
-                  onNext={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()+1,1))}/>
                 {/* Today's events */}
                 <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
                   <div style={{fontSize:11,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:12}}>Azi — {fmt(TODAY)}</div>
@@ -1392,6 +1389,9 @@ export default function App(){
                     ))
                   })()}
                 </div>
+                <CalendarWidget projects={projects} T={T} month={calMonth}
+                  onPrev={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()-1,1))}
+                  onNext={()=>setCalMonth(m=>new Date(m.getFullYear(),m.getMonth()+1,1))}/>
               </div>
             </div>
           ):(
