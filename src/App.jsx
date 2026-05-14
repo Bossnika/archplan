@@ -976,7 +976,7 @@ const CalendarWidget = ({projects, T, month, onPrev, onNext}) => {
 /* ─── MAIN APP ───────────────────────────────────────────────────────────────── */
 export default function App(){
   const { user, loading, logout } = useAuth();
-  const [accessStatus, setAccessStatus] = useState('checking')
+  const [accessStatus, setAccessStatus] = useState('approved')
   const [pendingRequests, setPendingRequests] = useState([])
   const [showRequests, setShowRequests] = useState(false)
   const [themeMode,setThemeMode]=useState("dark");

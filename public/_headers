@@ -1,3 +1,7 @@
+/*
+  Cross-Origin-Opener-Policy: unsafe-none
+  Cross-Origin-Embedder-Policy: unsafe-none
+
 /firebase-messaging-sw.js
   Service-Worker-Allowed: /
   Cache-Control: no-cache
