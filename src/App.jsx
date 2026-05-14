@@ -1458,30 +1458,91 @@ export default function App(){
                   </div>
                 ))}
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
-                {projects.map(p=>{
-                  const pc=pctOf(p.phases),next=p.phases.find(ph=>ph.status!=="approved"&&ph.status!=="rejected"),ov=next&&diffD(TODAY,next.endDate)<0;
-                  return(
-                    <div key={p.id} onClick={()=>{setSelId(p.id);setTab("faze");}}
-                      style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16,cursor:"pointer",transition:"border-color .15s,box-shadow .15s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=`${T.accent}66`;e.currentTarget.style.boxShadow=T.shadow;}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
-                        <div style={{fontSize:13,fontWeight:700,color:T.text,flex:1,paddingRight:8,lineHeight:1.3}}>{p.name}</div>
-                        <span style={{fontSize:14,fontWeight:800,color:ov?T.red:pc===100?T.green:T.accent,flexShrink:0}}>{pc}%</span>
+              {(()=>{
+                const dashProjects = navSection==='toate' ? projects
+                  : navSection==='arhitectura' ? projects.filter(p=>p.type==='arhitectura')
+                  : navSection==='urbanism' ? projects.filter(p=>p.type==='urbanism')
+                  : navSection==='active' ? projects.filter(p=>pctOf(p.phases)<100)
+                  : navSection==='finalizate' ? projects.filter(p=>pctOf(p.phases)===100)
+                  : navSection==='intarziate' ? projects.filter(p=>(p.phases||[]).some(ph=>ph.status!=='approved'&&ph.status!=='rejected'&&diffD(TODAY,ph.endDate)<0))
+                  : projects
+                return navSection==='avize' ? (
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Toate avizele</div>
+                    {projects.flatMap(p=>(p.avize||[]).map(av=>({...av,projName:p.name}))).map((av,i)=>{
+                      const inst=INST.find(x=>x.id===av.instId)
+                      return (
+                        <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:T.panel,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+                          {inst&&<inst.Icon size={14} color={inst.color}/>}
+                          <span style={{flex:1,fontSize:12,color:T.text}}>{inst?.name||av.instId}</span>
+                          <span style={{fontSize:11,color:T.textDim}}>{av.projName}</span>
+                          <span style={{fontSize:11,fontWeight:600,color:STATUS_META[av.status]?.color||T.textDim}}>{STATUS_META[av.status]?.label}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : navSection==='financiar' ? (
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Situație financiară</div>
+                    {projects.map(p=>{
+                      const facturi=p.facturi||[]
+                      const total=facturi.reduce((s,f)=>s+(parseFloat(f.suma)||0),0)
+                      const incasat=facturi.filter(f=>f.status==='incasata').reduce((s,f)=>s+(parseFloat(f.suma)||0),0)
+                      return (
+                        <div key={p.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:T.panel,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:8}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name}</div>
+                            <div style={{fontSize:11,color:T.textDim}}>{facturi.length} facturi</div>
+                          </div>
+                          <div style={{textAlign:'right'}}>
+                            <div style={{fontSize:13,fontWeight:700,color:T.accent}}>{total.toLocaleString()} RON total</div>
+                            <div style={{fontSize:11,color:T.green}}>{incasat.toLocaleString()} RON încasat</div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (()=>{
+                  const grouped = PROJECT_TYPES.map(pt=>({
+                    ...pt,
+                    items: dashProjects.filter(p=>p.type===pt.id||((!p.type)&&pt.id==='arhitectura'))
+                  })).filter(g=>g.items.length>0)
+                  if(grouped.length===0) return <div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'40px 0'}}>Niciun proiect în această categorie</div>
+                  return grouped.map(g=>(
+                    <div key={g.id} style={{marginBottom:24}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                        <div style={{width:10,height:10,borderRadius:'50%',background:g.color}}/>
+                        <span style={{fontSize:12,fontWeight:700,color:g.color,textTransform:'uppercase',letterSpacing:.8}}>{g.label}</span>
+                        <span style={{fontSize:11,color:T.textDim}}>({g.items.length})</span>
                       </div>
-                      <div style={{fontSize:11,color:T.textDim,marginBottom:6,display:"flex",alignItems:"center",gap:4}}><User size={11}/>{p.client}</div>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-                        {(p.members||[]).slice(0,4).map((m,i)=>(<Avatar key={m.id} name={m.name} email={m.email} size={20} style={{marginLeft:i===0?0:-4}}/>))}
-                        {(p.members||[]).length>4&&<span style={{fontSize:10,color:T.textDim}}>+{p.members.length-4}</span>}
-                      </div>
-                      <div style={{height:3,background:T.border,borderRadius:2,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:`${pc}%`,background:ov?T.red:pc===100?T.green:T.accent,borderRadius:2,transition:"width .5s"}}/>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+                        {g.items.map(p=>{
+                          const pc=pctOf(p.phases),next=(p.phases||[]).find(ph=>ph.status!=="approved"&&ph.status!=="rejected"),ov=next&&diffD(TODAY,next.endDate)<0;
+                          const tc=projTypeColor(p.type)
+                          return(
+                            <div key={p.id} onClick={()=>{setSelId(p.id);setTab("faze");}}
+                              style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16,cursor:"pointer",transition:"border-color .15s,box-shadow .15s",borderTop:`3px solid ${tc}`}}
+                              onMouseEnter={e=>{e.currentTarget.style.borderColor=`${tc}88`;e.currentTarget.style.boxShadow=T.shadow;}}
+                              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.borderTopColor=tc;e.currentTarget.style.boxShadow="none";}}>
+                              <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                                <div style={{fontSize:13,fontWeight:700,color:T.text,flex:1,paddingRight:8,lineHeight:1.3}}>{p.name}</div>
+                                <span style={{fontSize:14,fontWeight:800,color:ov?T.red:pc===100?T.green:tc,flexShrink:0}}>{pc}%</span>
+                              </div>
+                              <div style={{fontSize:11,color:T.textDim,marginBottom:6,display:"flex",alignItems:"center",gap:4}}><User size={11}/>{p.client}</div>
+                              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+                                {(p.members||[]).slice(0,4).map((m,i)=>(<Avatar key={m.id} name={m.name} email={m.email} size={20} style={{marginLeft:i===0?0:-4}}/>))}
+                              </div>
+                              <div style={{height:3,background:T.border,borderRadius:2,overflow:"hidden"}}>
+                                <div style={{height:"100%",width:`${pc}%`,background:ov?T.red:pc===100?T.green:tc,borderRadius:2,transition:"width .5s"}}/>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  ))
+                })()
+              })()}
               <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,marginTop:20}}>
                 {/* Today's events */}
                 <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
@@ -1618,10 +1679,21 @@ export default function App(){
                   style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:'8px 11px',color:T.text,fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
               </div>
             ))}
-            <div style={{marginBottom:18}}>
+            <div style={{marginBottom:14}}>
               <div style={{fontSize:10,color:T.textDim,marginBottom:4,textTransform:'uppercase',letterSpacing:.6}}>Dată start</div>
               <input type="date" value={editProjData.startDate||''} onChange={e=>setEditProjData(d=>({...d,startDate:e.target.value}))}
                 style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:'8px 11px',color:T.text,fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{marginBottom:18}}>
+              <label style={{fontSize:10,color:T.textDim,display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.6}}>Tip proiect</label>
+              <div style={{display:'flex',gap:6}}>
+                {PROJECT_TYPES.map(pt=>(
+                  <button key={pt.id} onClick={()=>setEditProjData(d=>({...d,type:pt.id}))}
+                    style={{flex:1,background:(editProjData.type||'arhitectura')===pt.id?`${pt.color}20`:'transparent',border:`1.5px solid ${(editProjData.type||'arhitectura')===pt.id?pt.color:T.border}`,borderRadius:7,padding:'6px 4px',color:(editProjData.type||'arhitectura')===pt.id?pt.color:T.textDim,cursor:'pointer',fontSize:11,fontWeight:(editProjData.type||'arhitectura')===pt.id?700:400,fontFamily:'inherit',transition:'all .12s'}}>
+                    {pt.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setShowEditProj(false)} style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'7px 16px',color:T.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Anulează</button>
