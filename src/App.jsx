@@ -51,7 +51,7 @@ const projTypeLabel = (type) => PROJECT_TYPES.find(t=>t.id===type)?.label || 'Ar
 /* ─── CONSTANTS ─────────────────────────────────────────────────────────────── */
 const GC = {CU:"#d29922",Avize:"#58a6ff",PT:"#bc8cff",AC:"#3fb950"};
 const STATUS_META = {
-  pending:    {label:"De făcut",   Icon:Circle,      color:"#484f58"},
+  pending:    {label:"WIP",         Icon:Circle,      color:"#484f58"},
   in_progress:{label:"În lucru",   Icon:Clock,       color:"#d29922"},
   submitted:  {label:"Depus",      Icon:FileText,    color:"#58a6ff"},
   approved:   {label:"Finalizat",  Icon:CheckCircle, color:"#3fb950"},
@@ -226,7 +226,12 @@ const Gantt=({phases,T})=>{
             <div key={ph.phaseId} style={{display:"flex",alignItems:"center",marginBottom:5}}>
               <div style={{width:188,flexShrink:0,paddingRight:10}}>
                 <div style={{fontSize:11,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ph.name}</div>
-                <Chip label={ph.group} color={c} T={T}/>
+                <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap',marginTop:2}}>
+                  <Chip label={ph.group} color={c} T={T}/>
+                  {ph.dependsOn&&phases.find(p=>p.phaseId===ph.dependsOn)&&(
+                    <span style={{fontSize:9,color:T.textDim}}>↳{phases.find(p=>p.phaseId===ph.dependsOn).name.slice(0,14)}</span>
+                  )}
+                </div>
               </div>
               <div style={{flex:1,height:20,background:T.border,borderRadius:3,position:"relative",overflow:"hidden"}}>
                 <div style={{position:"absolute",left:`${l}%`,width:`${w}%`,height:"100%",background:ph.status==="approved"?c:`${c}44`,border:`1px solid ${c}66`,borderRadius:3}}/>
@@ -278,11 +283,18 @@ const SharedView = ({ token }) => {
   const T = DARK
 
   useEffect(() => {
-    if(token.length > 80) {
-      // Long token = base64 encoded data (legacy)
+    // b64_ prefix = base64 fallback
+    if(token.startsWith('b64_')) {
+      try {
+        const b64 = token.slice(4)
+        const decoded = JSON.parse(decodeURIComponent(escape(atob(b64))))
+        setData({ project: { name: decoded.n, client: decoded.c, location: decoded.l, startDate: decoded.s, phases: decoded.ph||[], avize: decoded.av||[], type: decoded.t||'arhitectura', clientNote: decoded.note||'' }, config: decoded.cfg || {faze:true,avize:true} })
+      } catch(e) { setErr(true) }
+    } else if(token.length > 80) {
+      // Long token without prefix = legacy base64
       try {
         const decoded = JSON.parse(decodeURIComponent(escape(atob(token))))
-        setData({ project: { name: decoded.n, client: decoded.c, location: decoded.l, startDate: decoded.s, phases: decoded.ph||[], avize: decoded.av||[], type: decoded.t||'arhitectura' }, config: decoded.cfg || {faze:true,avize:true} })
+        setData({ project: { name: decoded.n, client: decoded.c, location: decoded.l, startDate: decoded.s, phases: decoded.ph||[], avize: decoded.av||[], type: decoded.t||'arhitectura', clientNote: decoded.note||'' }, config: decoded.cfg || {faze:true,avize:true} })
       } catch(e) { setErr(true) }
     } else {
       // Short token = Firestore stored share
@@ -361,7 +373,7 @@ const SharedView = ({ token }) => {
             <div style={{fontSize:12,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:14}}>Faze proiect</div>
             {phases.map(ph => {
               const c = {CU:'#d29922',Avize:'#58a6ff',PT:'#bc8cff',AC:'#3fb950'}[ph.group]||'#58a6ff'
-              const sm = {pending:{l:'De făcut',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Finalizat',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
+              const sm = {pending:{l:'WIP',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Finalizat',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
               const s = sm[ph.status]||sm.pending
               return (
                 <div key={ph.phaseId} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:`1px solid ${T.border}`}}>
@@ -375,28 +387,43 @@ const SharedView = ({ token }) => {
           </div>
         )}
 
+        {p.clientNote&&(
+          <div style={{background:`${typeColor}0a`,border:`1px solid ${typeColor}33`,borderRadius:10,padding:18,marginBottom:16}}>
+            <div style={{fontSize:10,fontWeight:700,color:typeColor,textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>Notă pentru client</div>
+            <div style={{fontSize:13,color:T.text,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{p.clientNote}</div>
+          </div>
+        )}
+
         {config.avize && avize.length>0 && (
           <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:20,marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:14}}>Avize</div>
             {avize.map(av => {
               const inst = INST.find(i=>i.id===av.instId)
-              const sm = {pending:{l:'De obținut',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Obținut ✓',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
+              const sm = {pending:{l:'WIP',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Obținut ✓',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
               const s = sm[av.status]||sm.pending
               const daysLeft = av.expiryDate ? Math.round((new Date(av.expiryDate)-new Date())/86400000) : null
               return (
-                <div key={av.avizId} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
-                  {inst&&<inst.Icon size={14} color={inst.color}/>}
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,color:T.text,fontWeight:500}}>{inst?.name||av.instId}</div>
-                    <div style={{display:'flex',gap:10,marginTop:3,flexWrap:'wrap'}}>
-                      {av.dosarNr&&<span style={{fontSize:10,color:T.textDim}}>Dosar: {av.dosarNr}</span>}
-                      {av.emissionDate&&<span style={{fontSize:10,color:T.textDim}}>Emis: {av.emissionDate}</span>}
-                      {av.expiryDate&&<span style={{fontSize:10,color:daysLeft!==null&&daysLeft<=30?'#f85149':T.textDim}}>
-                        Expiră: {av.expiryDate}{daysLeft!==null&&daysLeft<=30&&daysLeft>=0?` ⚠ ${daysLeft}z`:''}
-                      </span>}
+                <div key={av.avizId} style={{padding:'12px 0',borderBottom:`1px solid ${T.border}`}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                    {inst&&<inst.Icon size={14} color={inst.color}/>}
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,color:T.text,fontWeight:500}}>{inst?.name||av.instId}</div>
+                      {av.dosarNr&&<div style={{fontSize:10,color:T.textDim,marginTop:1}}>Nr. dosar: <strong>{av.dosarNr}</strong></div>}
                     </div>
+                    <div style={{fontSize:11,fontWeight:600,color:s.c,background:`${s.c}14`,border:`1px solid ${s.c}33`,borderRadius:4,padding:'2px 8px',flexShrink:0}}>{s.l}</div>
                   </div>
-                  <div style={{fontSize:11,fontWeight:600,color:s.c,background:`${s.c}14`,border:`1px solid ${s.c}33`,borderRadius:4,padding:'2px 8px'}}>{s.l}</div>
+                  <div style={{display:'flex',gap:16,flexWrap:'wrap',paddingLeft:22}}>
+                    {av.submissionDate&&<div style={{fontSize:10}}><span style={{color:T.textDim}}>Depus: </span><strong style={{color:T.text}}>{av.submissionDate}</strong></div>}
+                    {av.estimatedDate&&<div style={{fontSize:10}}><span style={{color:T.textDim}}>Estimat emitere: </span><strong style={{color:T.text}}>{av.estimatedDate}</strong></div>}
+                    {av.emissionDate&&<div style={{fontSize:10}}><span style={{color:T.textDim}}>Emis: </span><strong style={{color:'#3fb950'}}>{av.emissionDate}</strong></div>}
+                    {av.expiryDate&&<div style={{fontSize:10}}>
+                      <span style={{color:T.textDim}}>Expiră: </span>
+                      <strong style={{color:daysLeft!==null&&daysLeft<=30?'#f85149':T.text}}>{av.expiryDate}</strong>
+                      {daysLeft!==null&&daysLeft<=30&&daysLeft>=0&&<span style={{color:'#f85149',fontWeight:700}}> ⚠ {daysLeft}z rămase</span>}
+                      {daysLeft!==null&&daysLeft<0&&<span style={{color:'#f85149',fontWeight:700}}> EXPIRAT</span>}
+                      {daysLeft!==null&&daysLeft>30&&<span style={{color:'#3fb950'}}> ({daysLeft}z)</span>}
+                    </div>}
+                  </div>
                 </div>
               )
             })}
@@ -779,6 +806,7 @@ const PhasesView=({project,onUpdate,T})=>{
   const [addingLink,setAddingLink]=useState(null);
   const [linkUrl,setLinkUrl]=useState('');
   const [linkName,setLinkName]=useState('');
+  const inp={width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:'4px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'};
   const cols="12px 1fr 76px 76px 130px 62px 44px";
   return(
     <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -790,6 +818,7 @@ const PhasesView=({project,onUpdate,T})=>{
         const c=GC[ph.group]||T.accent;
         const pv={approved:100,submitted:75,in_progress:40,pending:0}[ph.status]||0;
         const isOpen=openPh===ph.phaseId;
+        const depPhase=ph.dependsOn?project.phases.find(p=>p.phaseId===ph.dependsOn):null;
         return(
           <div key={ph.phaseId}>
             <div onClick={()=>setOpenPh(isOpen?null:ph.phaseId)}
@@ -799,6 +828,10 @@ const PhasesView=({project,onUpdate,T})=>{
               <div style={{width:8,height:8,borderRadius:"50%",background:STATUS_META[ph.status]?.color||T.textDim,flexShrink:0}}/>
               <div>
                 <div style={{fontSize:12,color:T.text,fontWeight:500}}>{ph.name}</div>
+                {ph.note&&<div style={{fontSize:10,color:T.textDim,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ph.note}</div>}
+                {depPhase&&<div style={{display:"flex",alignItems:"center",gap:3,marginTop:1}}>
+                  <ChevronRight size={9} color={T.textDim}/><span style={{fontSize:9,color:T.textDim,fontStyle:'italic'}}>dep: {depPhase.name}</span>
+                </div>}
                 {ov&&<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><AlertTriangle size={10} color={T.red}/><span style={{fontSize:10,color:T.red}}>{-dl}z întârziat</span></div>}
               </div>
               <span style={{fontSize:11,color:T.textDim}}>{fmtS(ph.startDate)}</span>
@@ -816,7 +849,41 @@ const PhasesView=({project,onUpdate,T})=>{
               </div>
             </div>
             {isOpen&&(
-              <div style={{padding:"10px 36px 14px",borderBottom:`1px solid ${T.border}`,background:T.panelHov}}>
+              <div style={{padding:"12px 36px 14px",borderBottom:`1px solid ${T.border}`,background:T.panelHov}}>
+                {/* Edit phase fields */}
+                <div style={{marginBottom:12,paddingBottom:12,borderBottom:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:10,fontWeight:600,color:T.textDim,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>Editează faza</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                    <div style={{gridColumn:'1/-1'}}>
+                      <div style={{fontSize:9,color:T.textDim,marginBottom:2,textTransform:'uppercase',letterSpacing:.5}}>Nume fază</div>
+                      <input value={ph.name} onChange={e=>onUpdate(ph.phaseId,{name:e.target.value})} style={inp}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:T.textDim,marginBottom:2,textTransform:'uppercase',letterSpacing:.5}}>Dată start</div>
+                      <input type="date" value={ph.startDate||''} onChange={e=>onUpdate(ph.phaseId,{startDate:e.target.value})} style={inp}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:T.textDim,marginBottom:2,textTransform:'uppercase',letterSpacing:.5}}>Termen</div>
+                      <input type="date" value={ph.endDate||''} onChange={e=>onUpdate(ph.phaseId,{endDate:e.target.value})} style={inp}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:T.textDim,marginBottom:2,textTransform:'uppercase',letterSpacing:.5}}>Depinde de</div>
+                      <select value={ph.dependsOn||''} onChange={e=>onUpdate(ph.phaseId,{dependsOn:e.target.value})}
+                        style={{...inp,cursor:'pointer'}}>
+                        <option value="">Fără dependință</option>
+                        {project.phases.filter(p=>p.phaseId!==ph.phaseId).map(p=>(
+                          <option key={p.phaseId} value={p.phaseId}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:T.textDim,marginBottom:2,textTransform:'uppercase',letterSpacing:.5}}>Nr. înregistrare / Notă</div>
+                      <input value={ph.note||''} onChange={e=>onUpdate(ph.phaseId,{note:e.target.value})}
+                        placeholder="ex: CU nr. 142/2024..." style={inp}/>
+                    </div>
+                  </div>
+                </div>
+                {/* Document links */}
                 <div style={{fontSize:10,fontWeight:600,color:T.textDim,textTransform:"uppercase",letterSpacing:.7,marginBottom:7,display:"flex",alignItems:"center",gap:5}}><Link2 size={11}/>Documente (linkuri cloud)</div>
                 {(ph.attachments||[]).map(att=>(
                   <div key={att.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 10px",background:T.bg,borderRadius:6,border:`1px solid ${T.border}`,marginBottom:4}}>
@@ -932,7 +999,11 @@ const AvizeView=({project,onUpdate,T})=>{
                         <span style={{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:.5}}>Data expirare</span>
                         {av.expiryDate&&(()=>{const dl=Math.round((new Date(av.expiryDate)-new Date())/86400000);return dl<=30&&dl>=0?<span style={{fontSize:9,fontWeight:700,color:T.red}}>⚠ {dl}z</span>:dl<0?<span style={{fontSize:9,fontWeight:700,color:T.red}}>EXPIRAT</span>:null})()}
                       </div>
-                      <input type="date" value={av.expiryDate||''} onChange={e=>onUpdate(av.avizId,{expiryDate:e.target.value})}
+                      <input type="date" value={av.expiryDate||''} onChange={e=>{
+                          if(av.emissionDate&&e.target.value&&e.target.value<av.emissionDate) return;
+                          onUpdate(av.avizId,{expiryDate:e.target.value});
+                        }}
+                        min={av.emissionDate||undefined}
                         style={{width:'100%',background:T.bg,border:`1px solid ${(()=>{const dl=av.expiryDate?Math.round((new Date(av.expiryDate)-new Date())/86400000):null;return dl!==null&&dl<=30?T.red:T.borderLt})()}`,borderRadius:6,padding:'5px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
                       {av.emissionDate&&(
                         <div style={{display:'flex',gap:4,marginTop:4}}>
@@ -1304,16 +1375,16 @@ const AvizeDashboard = ({projects, T, onNavigate}) => {
       {filtered.length===0&&(
         <div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'30px 0'}}>Niciun aviz corespunde filtrelor selectate</div>
       )}
-      <div style={{display:'flex',flexDirection:'column',gap:6}}>
-        {filtered.map((av,i)=>{
+      {filtered.length>0&&(()=>{
+        const sm={pending:{l:'WIP',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Obținut',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
+        const renderCard=(av,idx,hideProj=false)=>{
           const inst=INST.find(x=>x.id===av.instId)
           const dl=av.expiryDate?Math.round((new Date(av.expiryDate)-new Date())/86400000):null
           const estDl=av.estimatedDate?Math.round((new Date(av.estimatedDate)-new Date())/86400000):null
-          const sm={pending:{l:'De obținut',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Obținut',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
           const s=sm[av.status]||sm.pending
           const tc=PROJECT_TYPES.find(pt=>pt.id===av.projType)?.color||'#58a6ff'
           return (
-            <div key={i} onClick={()=>onNavigate(av.projId,'avize')}
+            <div key={`${av.projId}-${av.instId}-${idx}`} onClick={()=>onNavigate(av.projId,'avize')}
               style={{display:'grid',gridTemplateColumns:'36px 1fr 160px 130px 100px',gap:10,alignItems:'center',padding:'11px 14px',background:T.panel,border:`1px solid ${T.border}`,borderRadius:9,cursor:'pointer',transition:'border-color .15s,box-shadow .15s'}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=inst?.color||T.accent;e.currentTarget.style.boxShadow=T.shadow;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow='none';}}>
@@ -1322,10 +1393,10 @@ const AvizeDashboard = ({projects, T, onNavigate}) => {
               </div>
               <div>
                 <div style={{fontSize:12,fontWeight:600,color:T.text}}>{inst?.name||av.instId}</div>
-                <div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
+                {!hideProj&&<div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
                   <div style={{width:6,height:6,borderRadius:'50%',background:tc,flexShrink:0}}/>
                   <span style={{fontSize:10,color:T.textDim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{av.projName}</span>
-                </div>
+                </div>}
               </div>
               <div style={{fontSize:10,color:T.textDim}}>
                 {av.submissionDate&&<div>Depus: <strong style={{color:T.text}}>{av.submissionDate}</strong></div>}
@@ -1345,8 +1416,35 @@ const AvizeDashboard = ({projects, T, onNavigate}) => {
               </div>
             </div>
           )
-        })}
-      </div>
+        }
+        if(sortBy==='project'){
+          const byProj={}
+          filtered.forEach(av=>{
+            if(!byProj[av.projId]) byProj[av.projId]={name:av.projName,type:av.projType,avize:[]}
+            byProj[av.projId].avize.push(av)
+          })
+          return Object.entries(byProj).map(([projId,proj])=>{
+            const tc=PROJECT_TYPES.find(pt=>pt.id===proj.type)?.color||T.accent
+            return (
+              <div key={projId} style={{marginBottom:20}}>
+                <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8,paddingBottom:7,borderBottom:`1px solid ${T.border}`}}>
+                  <div style={{width:9,height:9,borderRadius:'50%',background:tc,flexShrink:0}}/>
+                  <span style={{fontSize:12,fontWeight:700,color:tc}}>{proj.name}</span>
+                  <span style={{fontSize:10,color:T.textDim}}>({proj.avize.length} avize)</span>
+                  <button onClick={e=>{e.stopPropagation();onNavigate(projId,'avize')}}
+                    style={{marginLeft:'auto',background:'transparent',border:`1px solid ${T.border}`,borderRadius:5,padding:'2px 8px',color:T.textDim,fontSize:10,cursor:'pointer',fontFamily:'inherit'}}>
+                    Deschide →
+                  </button>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  {proj.avize.map((av,i)=>renderCard(av,i,true))}
+                </div>
+              </div>
+            )
+          })
+        }
+        return <div style={{display:'flex',flexDirection:'column',gap:6}}>{filtered.map((av,i)=>renderCard(av,i,false))}</div>
+      })()}
     </div>
   )
 }
@@ -1518,24 +1616,56 @@ export default function App(){
     showToast('Proiect șters', T.red)
   }
 
+  // Remove Firestore Timestamps so data is safe to re-write or JSON-encode
+  const cleanForShare = (v) => {
+    if(v===null||v===undefined) return null
+    if(typeof v==='string'||typeof v==='number'||typeof v==='boolean') return v
+    if(Array.isArray(v)) return v.map(cleanForShare)
+    if(v && typeof v==='object') {
+      if(typeof v.toDate==='function') return v.toDate().toISOString()
+      return Object.fromEntries(
+        Object.entries(v)
+          .filter(([k])=>k!=='createdAt'&&k!=='updatedAt')
+          .map(([k,val])=>[k,cleanForShare(val)])
+      )
+    }
+    return v
+  }
+
   const handleGenerateShare = async () => {
     if(!shareTargetProj || !user) return
     setShareLoading(true)
     try {
-      const projectSnapshot = {
+      const projectSnapshot = cleanForShare({
         name: shareTargetProj.name,
         client: shareTargetProj.client,
         location: shareTargetProj.location,
         startDate: shareTargetProj.startDate,
         type: shareTargetProj.type,
+        clientNote: shareConfig.clientNote || '',
         phases: shareConfig.faze ? (shareTargetProj.phases||[]) : [],
         avize: shareConfig.avize ? (shareTargetProj.avize||[]) : [],
-      }
+      })
       const token = await createShareLink(user.uid, shareTargetProj.id, shareConfig, projectSnapshot)
       setShareToken(token)
     } catch(e) {
-      console.error(e)
-      showToast('Eroare la generarea linkului', T.red)
+      console.error('Share link error:', e)
+      // Fallback: generate base64 encoded URL (works without Firestore)
+      try {
+        const data = {
+          n: shareTargetProj.name, c: shareTargetProj.client, l: shareTargetProj.location,
+          s: shareTargetProj.startDate, t: shareTargetProj.type,
+          note: shareConfig.clientNote||'',
+          ph: shareConfig.faze ? cleanForShare(shareTargetProj.phases||[]) : [],
+          av: shareConfig.avize ? cleanForShare(shareTargetProj.avize||[]) : [],
+          cfg: shareConfig,
+        }
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))))
+        setShareToken('b64_' + encoded)
+        showToast('Link generat (mod offline)', T.amber)
+      } catch(e2) {
+        showToast('Eroare la generarea linkului', T.red)
+      }
     } finally {
       setShareLoading(false)
     }
@@ -1899,7 +2029,7 @@ export default function App(){
                   ))
                 })()
               })()}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,marginTop:20}}>
+              {navSection==='toate'&&<div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,marginTop:20}}>
                 {/* Today's events */}
                 <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
                   <div style={{fontSize:11,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:12}}>Azi — {fmt(TODAY)}</div>
@@ -1962,7 +2092,7 @@ export default function App(){
                   notes={notes}
                   onAddNote={(date, text)=>{ if(user) createNote(user.uid, {date, text, type:'note'}) }}
                   onDeleteNote={(noteId)=>{ if(user) deleteNote(user.uid, noteId) }}/>
-              </div>
+              </div>}
             </div>
           ):(
             /* Project detail */
@@ -2114,13 +2244,19 @@ export default function App(){
             {!shareToken?(
               <>
                 <div style={{fontSize:11,fontWeight:600,color:T.textMd,marginBottom:10}}>Selectează ce vede clientul:</div>
-                {[['faze','Faze proiect'],['avize','Avize'],['gantt','Grafic Gantt']].map(([key,label])=>(
+                {[['faze','Faze proiect'],['avize','Avize']].map(([key,label])=>(
                   <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
-                    <input type="checkbox" checked={shareConfig[key]} onChange={e=>setShareConfig(c=>({...c,[key]:e.target.checked}))}/>
+                    <input type="checkbox" checked={!!shareConfig[key]} onChange={e=>setShareConfig(c=>({...c,[key]:e.target.checked}))}/>
                     <span style={{fontSize:12,color:T.text}}>{label}</span>
                   </label>
                 ))}
-                <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:18}}>
+                <div style={{marginTop:12,marginBottom:6}}>
+                  <div style={{fontSize:10,color:T.textDim,marginBottom:4,textTransform:'uppercase',letterSpacing:.5}}>Notă pentru client (opțional)</div>
+                  <textarea value={shareConfig.clientNote||''} onChange={e=>setShareConfig(c=>({...c,clientNote:e.target.value}))}
+                    rows={3} placeholder="Scrie un mesaj pentru client ce va apărea în fruntea pagii share…"
+                    style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:7,padding:'7px 10px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',resize:'vertical',boxSizing:'border-box'}}/>
+                </div>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:12}}>
                   <button onClick={()=>setShowShareModal(false)} style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'7px 16px',color:T.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Anulează</button>
                   <button onClick={handleGenerateShare} disabled={shareLoading} style={{background:T.accent,border:'none',borderRadius:7,padding:'7px 18px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
                     {shareLoading?'Se generează…':'Generează link'}
@@ -2129,14 +2265,19 @@ export default function App(){
               </>
             ):(
               <>
-                <div style={{fontSize:11,color:T.textDim,marginBottom:8}}>Link generat — copiază și trimite clientului:</div>
-                <div style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:7,padding:'10px 12px',fontSize:12,color:T.accent,wordBreak:'break-all',marginBottom:14}}>
+                <div style={{fontSize:11,color:T.green,fontWeight:600,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+                  <CheckCircle size={13}/>Link generat — copiază și trimite clientului:
+                </div>
+                <div style={{background:T.bg,border:`1px solid ${T.accent}44`,borderRadius:7,padding:'10px 12px',fontSize:11,color:T.accent,wordBreak:'break-all',marginBottom:14,userSelect:'all'}}>
                   {window.location.origin}/?share={shareToken}
+                </div>
+                <div style={{fontSize:10,color:T.textDim,marginBottom:14}}>
+                  {shareToken.startsWith('b64_') ? '⚠ Link lung (Firestore indisponibil, funcționează fără server)' : '✓ Link scurt via Firestore'}
                 </div>
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                   <button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/?share=${shareToken}`);showToast('Link copiat!',T.green);}}
-                    style={{background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:7,padding:'7px 16px',color:T.accent,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600}}>Copiază</button>
-                  <button onClick={()=>setShowShareModal(false)} style={{background:T.accent,border:'none',borderRadius:7,padding:'7px 16px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Gata</button>
+                    style={{background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:7,padding:'7px 16px',color:T.accent,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600}}>Copiază link</button>
+                  <button onClick={()=>{setShowShareModal(false);setShareToken(null)}} style={{background:T.accent,border:'none',borderRadius:7,padding:'7px 16px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Gata</button>
                 </div>
               </>
             )}
