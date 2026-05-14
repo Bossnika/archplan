@@ -8,6 +8,7 @@ import {
   Droplets, Radio, Leaf, ChevronDown, MoreVertical
 } from "lucide-react";
 import { useAuth } from './hooks/useAuth.jsx'
+import { COMPANY } from './lib/constants.js'
 import LoginPage from './pages/LoginPage.jsx'
 import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, createShareLink, getSharedProject } from './lib/db.js'
 import { sendMentionEmail } from './lib/emailService.js'
@@ -1238,17 +1239,43 @@ export default function App(){
             <Avatar name={CURRENT_USER.name} email={CURRENT_USER.email} size={30}/>
           </div>
           {uMenu&&(
-            <div className="fade-up" style={{position:"absolute",top:38,right:0,background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:10,padding:6,minWidth:210,boxShadow:T.shadowLg,zIndex:100}}>
-              <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
-                <Avatar name={CURRENT_USER.name} email={CURRENT_USER.email} size={36}/>
-                <div>
-                  <div style={{fontSize:12,fontWeight:700,color:T.text}}>{CURRENT_USER.name}</div>
-                  <div style={{fontSize:10,color:T.textDim}}>{CURRENT_USER.email}</div>
+            <div className="fade-up" onClick={e=>e.stopPropagation()} style={{position:"absolute",top:38,right:0,background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:12,padding:0,minWidth:260,boxShadow:T.shadowLg,zIndex:100,overflow:"hidden"}}>
+              {/* Header profil */}
+              <div style={{padding:"16px 16px 12px",background:`linear-gradient(135deg,${T.accent}18,${T.purple}18)`,borderBottom:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                  <Avatar name={CURRENT_USER.name} email={CURRENT_USER.email} size={44}/>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>{CURRENT_USER.name}</div>
+                    <div style={{fontSize:11,color:T.textDim,marginTop:2}}>{CURRENT_USER.email}</div>
+                    <div style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:5,background:`${T.green}18`,border:`1px solid ${T.green}30`,borderRadius:4,padding:"1px 7px"}}>
+                      <div style={{width:5,height:5,borderRadius:"50%",background:T.green}}/>
+                      <span style={{fontSize:10,fontWeight:600,color:T.green}}>Owner · Activ</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Statistici rapide */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                  {[
+                    {l:"Proiecte",v:projects.length},
+                    {l:"Active",v:projects.filter(p=>pctOf(p.phases)<100).length},
+                    {l:"Avize",v:projects.reduce((s,p)=>(p.avize||[]).filter(a=>a.status==="approved").length+s,0)},
+                  ].map(s=>(
+                    <div key={s.l} style={{background:T.bg,borderRadius:7,padding:"7px 8px",textAlign:"center",border:`1px solid ${T.border}`}}>
+                      <div style={{fontSize:16,fontWeight:800,color:T.accent}}>{s.v}</div>
+                      <div style={{fontSize:9,color:T.textDim,textTransform:"uppercase",letterSpacing:.5}}>{s.l}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <button onClick={()=>{setUMenu(false);logout();}} style={{width:"100%",background:"transparent",border:"none",padding:"7px 12px",color:T.red,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:6,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
-                <LogOut size={13}/>Deconectare
-              </button>
+              {/* Actiuni */}
+              <div style={{padding:6}}>
+                <div style={{padding:"7px 12px",fontSize:11,color:T.textDim,display:"flex",alignItems:"center",gap:6}}>
+                  <Settings size={11}/>{COMPANY.name}
+                </div>
+                <button onClick={()=>{setUMenu(false);logout();}} style={{width:"100%",background:"transparent",border:"none",padding:"8px 12px",color:T.red,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:7,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
+                  <LogOut size={13}/>Deconectare
+                </button>
+              </div>
             </div>
           )}
         </div>
