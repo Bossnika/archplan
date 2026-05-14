@@ -368,7 +368,7 @@ const Chat=({project,T,currentUser,showToast})=>{
         </div>
         <div style={{flex:1,padding:"6px"}}>
           {CHANNELS.map(ch=>{
-            const unread=ch.id!=="general"&&(allMsgs[ch.id]||[]).length>0&&ch.id!==channel?1:0;
+            const unread=0;
             return(
               <button key={ch.id} onClick={()=>setChannel(ch.id)}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"7px 10px",borderRadius:7,
