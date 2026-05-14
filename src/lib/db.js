@@ -124,6 +124,10 @@ export const listenPendingRequests = (cb) =>
   onSnapshot(query(collection(db, 'accessRequests'), where('status', '==', 'pending')), snap =>
     cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
 
+export const listenApprovedUsers = (cb) =>
+  onSnapshot(query(collection(db, 'accessRequests'), where('status', '==', 'approved')), snap =>
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+
 // ── SHARE LINKS ───────────────────────────────────────────────────────────────
 export const createShareLink = async (ownerUid, projectId, config, projectSnapshot) => {
   const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)

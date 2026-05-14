@@ -69,12 +69,12 @@ const AVATAR_COLORS = [
   "#39d353","#ff7b72","#79c0ff","#ffa657","#56d364",
 ];
 const INST = [
-  {id:"electrica",name:"Electrica / E.ON / CEZ",  short:"Electrică", Icon:Zap,      color:"#d29922"},
-  {id:"gaz",      name:"Distrigaz / E.ON Gaz",    short:"Gaz",       Icon:Flame,    color:"#f0883e"},
-  {id:"apa",      name:"Apă-Canal (RAJAC)",        short:"Apă-Canal", Icon:Droplets, color:"#58a6ff"},
-  {id:"telecom",  name:"Telecom",                  short:"Telecom",   Icon:Radio,    color:"#bc8cff"},
-  {id:"mediu",    name:"APM — Mediu",              short:"Mediu",     Icon:Leaf,     color:"#3fb950"},
-  {id:"drumuri",  name:"DRDP / Drumuri",           short:"Drumuri",   Icon:Map,      color:"#8b949e"},
+  {id:"electrica",name:"Electrica / E.ON / CEZ",  short:"Electrică", Icon:Zap,      color:"#d29922", validity:24, info:"Aviz tehnic de racordare electrică. Documente: cerere tip, plan de situație, memoriu tehnic."},
+  {id:"gaz",      name:"Distrigaz / E.ON Gaz",    short:"Gaz",       Icon:Flame,    color:"#f0883e", validity:24, info:"Aviz tehnic de racordare gaz. Documente: cerere tip, plan de situație, memoriu instalații."},
+  {id:"apa",      name:"Apă-Canal (RAJAC)",        short:"Apă-Canal", Icon:Droplets, color:"#58a6ff", validity:12, info:"Aviz branșament apă-canal. Documente: cerere, plan cadastral, acte proprietate."},
+  {id:"telecom",  name:"Telecom",                  short:"Telecom",   Icon:Radio,    color:"#bc8cff", validity:24, info:"Aviz infrastructură telecom. Documente: cerere, plan de situație."},
+  {id:"mediu",    name:"APM — Mediu",              short:"Mediu",     Icon:Leaf,     color:"#3fb950", validity:12, info:"Aviz de mediu APM. Documente: memoriu de prezentare, fișă sintetică, plan de situație."},
+  {id:"drumuri",  name:"DRDP / Drumuri",           short:"Drumuri",   Icon:Map,      color:"#8b949e", validity:12, info:"Aviz administrator drum. Documente: cerere, plan de situație, studiu de trafic dacă e cazul."},
 ];
 
 /* ─── DEMO MEMBERS ───────────────────────────────────────────────────────────── */
@@ -278,11 +278,14 @@ const SharedView = ({ token }) => {
   const T = DARK
 
   useEffect(() => {
-    try {
-      const decoded = JSON.parse(decodeURIComponent(escape(atob(token))))
-      setData({ project: { name: decoded.n, client: decoded.c, location: decoded.l, startDate: decoded.s, phases: decoded.ph||[], avize: decoded.av||[] }, config: decoded.cfg || {faze:true,avize:true} })
-    } catch(e) {
-      // fallback: try Firestore
+    if(token.length > 80) {
+      // Long token = base64 encoded data (legacy)
+      try {
+        const decoded = JSON.parse(decodeURIComponent(escape(atob(token))))
+        setData({ project: { name: decoded.n, client: decoded.c, location: decoded.l, startDate: decoded.s, phases: decoded.ph||[], avize: decoded.av||[], type: decoded.t||'arhitectura' }, config: decoded.cfg || {faze:true,avize:true} })
+      } catch(e) { setErr(true) }
+    } else {
+      // Short token = Firestore stored share
       getSharedProject(token).then(r => { if(r) setData(r); else setErr(true) }).catch(()=>setErr(true))
     }
   }, [token])
@@ -300,44 +303,100 @@ const SharedView = ({ token }) => {
   const { project: p, config } = data
   const phases = p.phases || []
   const avize  = p.avize  || []
+  const pct = phases.length ? Math.round(phases.filter(ph=>ph.status==='approved').length/phases.length*100) : 0
+  const avizDone = avize.filter(av=>av.status==='approved').length
+  const typeColor = PROJECT_TYPES.find(t=>t.id===p.type)?.color || '#58a6ff'
+
   return (
     <div style={{minHeight:'100vh',background:T.bg,color:T.text,fontFamily:"'Geist','Helvetica Neue',sans-serif",padding:'0 0 40px'}}>
       <style>{`*{box-sizing:border-box;}body{margin:0;}`}</style>
       <header style={{background:T.sidebar,borderBottom:`1px solid ${T.border}`,padding:'14px 28px',display:'flex',alignItems:'center',gap:12}}>
-        <div style={{width:26,height:26,borderRadius:7,background:`linear-gradient(135deg,${T.accent},${T.purple})`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <div style={{width:26,height:26,borderRadius:7,background:`linear-gradient(135deg,#58a6ff,#bc8cff)`,display:'flex',alignItems:'center',justifyContent:'center'}}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         </div>
         <span style={{fontSize:14,fontWeight:700,color:T.text}}>ArchPlan</span>
         <span style={{fontSize:11,color:T.textDim,marginLeft:4}}>— Vizualizare proiect</span>
       </header>
-      <div style={{maxWidth:900,margin:'32px auto',padding:'0 20px'}}>
-        <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:'0 0 6px'}}>{p.name}</h1>
-        <div style={{fontSize:12,color:T.textDim,marginBottom:28,display:'flex',gap:16}}>
-          {p.client&&<span>Client: {p.client}</span>}
-          {p.location&&<span>Locație: {p.location}</span>}
+      <div style={{maxWidth:960,margin:'32px auto',padding:'0 20px'}}>
+        {/* Header card */}
+        <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:12,padding:24,marginBottom:16,borderTop:`3px solid ${typeColor}`}}>
+          <div style={{display:'flex',alignItems:'flex-start',gap:16,flexWrap:'wrap'}}>
+            <div style={{flex:1}}>
+              <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:'0 0 6px'}}>{p.name}</h1>
+              <div style={{fontSize:12,color:T.textDim,display:'flex',gap:16,flexWrap:'wrap'}}>
+                {p.client&&<span>Client: <strong style={{color:T.text}}>{p.client}</strong></span>}
+                {p.location&&<span>Locație: <strong style={{color:T.text}}>{p.location}</strong></span>}
+              </div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:36,fontWeight:800,color:typeColor,lineHeight:1}}>{pct}%</div>
+              <div style={{fontSize:11,color:T.textDim}}>progres general</div>
+            </div>
+          </div>
+          {/* Progress bar */}
+          <div style={{height:6,background:T.border,borderRadius:3,overflow:'hidden',marginTop:16}}>
+            <div style={{height:'100%',width:`${pct}%`,background:typeColor,borderRadius:3,transition:'width .6s'}}/>
+          </div>
+          {/* Summary chips */}
+          <div style={{display:'flex',gap:10,marginTop:14,flexWrap:'wrap'}}>
+            <div style={{background:`${typeColor}14`,border:`1px solid ${typeColor}33`,borderRadius:7,padding:'6px 12px',fontSize:11}}>
+              <span style={{color:T.textDim}}>Faze finalizate: </span>
+              <strong style={{color:typeColor}}>{phases.filter(ph=>ph.status==='approved').length}/{phases.length}</strong>
+            </div>
+            <div style={{background:'#3fb95014',border:'1px solid #3fb95033',borderRadius:7,padding:'6px 12px',fontSize:11}}>
+              <span style={{color:T.textDim}}>Avize obținute: </span>
+              <strong style={{color:'#3fb950'}}>{avizDone}/{avize.length}</strong>
+            </div>
+            {avize.filter(av=>av.emissionDate&&av.expiryDate).length>0&&(
+              <div style={{background:'#d2992214',border:'1px solid #d2992233',borderRadius:7,padding:'6px 12px',fontSize:11}}>
+                <span style={{color:T.textDim}}>Avize cu valabilitate: </span>
+                <strong style={{color:'#d29922'}}>{avize.filter(av=>av.emissionDate&&av.expiryDate).length}</strong>
+              </div>
+            )}
+          </div>
         </div>
-        {config.faze && (
+
+        {config.faze && phases.length>0 && (
           <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:20,marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:14}}>Faze proiect</div>
-            {phases.map(ph => (
-              <div key={ph.phaseId} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
-                <div style={{flex:1,fontSize:13,color:T.text}}>{ph.name}</div>
-                <div style={{fontSize:11,color:T.textDim}}>{ph.startDate} → {ph.endDate}</div>
-                <div style={{fontSize:11,fontWeight:600,color:STATUS_META[ph.status]?.color||T.textDim}}>{STATUS_META[ph.status]?.label||ph.status}</div>
-              </div>
-            ))}
+            {phases.map(ph => {
+              const c = {CU:'#d29922',Avize:'#58a6ff',PT:'#bc8cff',AC:'#3fb950'}[ph.group]||'#58a6ff'
+              const sm = {pending:{l:'De făcut',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Finalizat',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
+              const s = sm[ph.status]||sm.pending
+              return (
+                <div key={ph.phaseId} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:`1px solid ${T.border}`}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:s.c,flexShrink:0}}/>
+                  <div style={{flex:1,fontSize:13,color:T.text}}>{ph.name}</div>
+                  <div style={{fontSize:10,color:T.textDim}}>{ph.startDate} → {ph.endDate}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:s.c,background:`${s.c}14`,border:`1px solid ${s.c}33`,borderRadius:4,padding:'2px 8px'}}>{s.l}</div>
+                </div>
+              )
+            })}
           </div>
         )}
-        {config.avize && (
+
+        {config.avize && avize.length>0 && (
           <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:10,padding:20,marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:T.textMd,textTransform:'uppercase',letterSpacing:.8,marginBottom:14}}>Avize</div>
             {avize.map(av => {
               const inst = INST.find(i=>i.id===av.instId)
+              const sm = {pending:{l:'De obținut',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Obținut ✓',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
+              const s = sm[av.status]||sm.pending
+              const daysLeft = av.expiryDate ? Math.round((new Date(av.expiryDate)-new Date())/86400000) : null
               return (
-                <div key={av.avizId} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
-                  <div style={{flex:1,fontSize:13,color:T.text}}>{inst?.name||av.instId}</div>
-                  {av.dosarNr&&<div style={{fontSize:11,color:T.textDim}}>Dosar: {av.dosarNr}</div>}
-                  <div style={{fontSize:11,fontWeight:600,color:STATUS_META[av.status]?.color||T.textDim}}>{STATUS_META[av.status]?.label||av.status}</div>
+                <div key={av.avizId} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
+                  {inst&&<inst.Icon size={14} color={inst.color}/>}
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,color:T.text,fontWeight:500}}>{inst?.name||av.instId}</div>
+                    <div style={{display:'flex',gap:10,marginTop:3,flexWrap:'wrap'}}>
+                      {av.dosarNr&&<span style={{fontSize:10,color:T.textDim}}>Dosar: {av.dosarNr}</span>}
+                      {av.emissionDate&&<span style={{fontSize:10,color:T.textDim}}>Emis: {av.emissionDate}</span>}
+                      {av.expiryDate&&<span style={{fontSize:10,color:daysLeft!==null&&daysLeft<=30?'#f85149':T.textDim}}>
+                        Expiră: {av.expiryDate}{daysLeft!==null&&daysLeft<=30&&daysLeft>=0?` ⚠ ${daysLeft}z`:''}
+                      </span>}
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,fontWeight:600,color:s.c,background:`${s.c}14`,border:`1px solid ${s.c}33`,borderRadius:4,padding:'2px 8px'}}>{s.l}</div>
                 </div>
               )
             })}
@@ -811,39 +870,56 @@ const AvizeView=({project,onUpdate,T})=>{
             </div>
             {isOpen&&(
               <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 16px 14px"}}>
-                {/* Emission & expiry dates */}
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12,padding:'10px 0 12px',borderBottom:`1px solid ${T.border}`}}>
-                  <div>
-                    <div style={{fontSize:9,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.7,marginBottom:5}}>Dată emitere</div>
-                    <input type="date" value={av.emissionDate||''} onChange={e=>{
-                      const ed=e.target.value
-                      onUpdate(av.avizId,{emissionDate:ed, expiryDate:av.expiryDate||''})
-                    }} style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:'5px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:9,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.7,marginBottom:5}}>
-                      Dată expirare
-                      {av.expiryDate&&diffD(TODAY,av.expiryDate)<=20&&diffD(TODAY,av.expiryDate)>=0&&(
-                        <span style={{marginLeft:6,color:T.red,fontWeight:700}}>⚠ {diffD(TODAY,av.expiryDate)}z</span>
+                {/* Date tracking */}
+                <div style={{borderBottom:`1px solid ${T.border}`,marginBottom:12,paddingBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.7,marginBottom:8}}>Depunere & emitere</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <div>
+                      <div style={{fontSize:9,color:T.textDim,marginBottom:3,textTransform:'uppercase',letterSpacing:.5}}>Data depunere documentație</div>
+                      <input type="date" value={av.submissionDate||''} onChange={e=>{
+                        const sd=e.target.value
+                        const updates={submissionDate:sd}
+                        if(sd&&!av.estimatedDate){const d=new Date(sd);d.setDate(d.getDate()+30);updates.estimatedDate=d.toISOString().slice(0,10)}
+                        onUpdate(av.avizId,updates)
+                      }} style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:'5px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:T.textDim,marginBottom:3,textTransform:'uppercase',letterSpacing:.5}}>Estimare emitere (≈30 zile)</div>
+                      <input type="date" value={av.estimatedDate||''} onChange={e=>onUpdate(av.avizId,{estimatedDate:e.target.value})}
+                        style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:'5px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                      {av.submissionDate&&!av.estimatedDate&&(
+                        <button onClick={()=>{const d=new Date(av.submissionDate);d.setDate(d.getDate()+30);onUpdate(av.avizId,{estimatedDate:d.toISOString().slice(0,10)})}}
+                          style={{marginTop:4,fontSize:9,background:T.accentBg,border:`1px solid ${T.accent}33`,color:T.accentLt,borderRadius:4,padding:'2px 6px',cursor:'pointer',fontFamily:'inherit'}}>+ 30 zile auto</button>
                       )}
                     </div>
-                    <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                      <input type="date" value={av.expiryDate||''} onChange={e=>onUpdate(av.avizId,{expiryDate:e.target.value})}
-                        style={{flex:1,background:T.bg,border:`1px solid ${av.expiryDate&&diffD(TODAY,av.expiryDate)<=20&&diffD(TODAY,av.expiryDate)>=0?T.red:T.borderLt}`,borderRadius:6,padding:'5px 8px',color:av.expiryDate&&diffD(TODAY,av.expiryDate)<=20&&diffD(TODAY,av.expiryDate)>=0?T.red:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                  </div>
+                </div>
+                <div style={{borderBottom:`1px solid ${T.border}`,marginBottom:12,paddingBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.7,marginBottom:8}}>Valabilitate aviz</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <div>
+                      <div style={{fontSize:9,color:T.textDim,marginBottom:3,textTransform:'uppercase',letterSpacing:.5}}>Data emitere aviz</div>
+                      <input type="date" value={av.emissionDate||''} onChange={e=>onUpdate(av.avizId,{emissionDate:e.target.value})}
+                        style={{width:'100%',background:T.bg,border:`1px solid ${T.borderLt}`,borderRadius:6,padding:'5px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
                     </div>
-                    {av.emissionDate&&(
-                      <div style={{display:'flex',gap:4,marginTop:4}}>
-                        {[12,24].map(m=>(
-                          <button key={m} onClick={()=>{
-                            const base=new Date(av.emissionDate)
-                            base.setMonth(base.getMonth()+m)
-                            onUpdate(av.avizId,{expiryDate:base.toISOString().slice(0,10)})
-                          }} style={{flex:1,background:T.accentBg,border:`1px solid ${T.accent}33`,borderRadius:5,padding:'3px 0',color:T.accentLt,fontSize:10,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>
-                            +{m} luni
-                          </button>
-                        ))}
+                    <div>
+                      <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
+                        <span style={{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:.5}}>Data expirare</span>
+                        {av.expiryDate&&(()=>{const dl=Math.round((new Date(av.expiryDate)-new Date())/86400000);return dl<=30&&dl>=0?<span style={{fontSize:9,fontWeight:700,color:T.red}}>⚠ {dl}z</span>:dl<0?<span style={{fontSize:9,fontWeight:700,color:T.red}}>EXPIRAT</span>:null})()}
                       </div>
-                    )}
+                      <input type="date" value={av.expiryDate||''} onChange={e=>onUpdate(av.avizId,{expiryDate:e.target.value})}
+                        style={{width:'100%',background:T.bg,border:`1px solid ${(()=>{const dl=av.expiryDate?Math.round((new Date(av.expiryDate)-new Date())/86400000):null;return dl!==null&&dl<=30?T.red:T.borderLt})()}`,borderRadius:6,padding:'5px 8px',color:T.text,fontSize:11,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                      {av.emissionDate&&(
+                        <div style={{display:'flex',gap:4,marginTop:4}}>
+                          {[12,24].map(m=>(
+                            <button key={m} onClick={()=>{const b=new Date(av.emissionDate);b.setMonth(b.getMonth()+m);onUpdate(av.avizId,{expiryDate:b.toISOString().slice(0,10)})}}
+                              style={{flex:1,background:T.accentBg,border:`1px solid ${T.accent}33`,borderRadius:5,padding:'3px 0',color:T.accentLt,fontSize:10,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>
+                              +{m} luni
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {/* Steps */}
@@ -1096,7 +1172,7 @@ export default function App(){
   const [accessStatus, setAccessStatus] = useState('approved')
   const [pendingRequests, setPendingRequests] = useState([])
   const [showRequests, setShowRequests] = useState(false)
-  const [themeMode,setThemeMode]=useState("dark");
+  const [themeMode,setThemeMode]=useState("auto");
   const sysDark=window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   const T=themeMode==="dark"||(themeMode==="auto"&&sysDark)?DARK:LIGHT;
 
@@ -1245,22 +1321,26 @@ export default function App(){
     showToast('Proiect șters', T.red)
   }
 
-  const handleGenerateShare = () => {
-    if(!shareTargetProj) return
-    const data = {
-      n: shareTargetProj.name,
-      c: shareTargetProj.client,
-      l: shareTargetProj.location,
-      s: shareTargetProj.startDate,
-      ph: shareConfig.faze ? shareTargetProj.phases : [],
-      av: shareConfig.avize ? shareTargetProj.avize : [],
-      cfg: shareConfig,
-    }
+  const handleGenerateShare = async () => {
+    if(!shareTargetProj || !user) return
+    setShareLoading(true)
     try {
-      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))))
-      setShareToken(encoded)
+      const projectSnapshot = {
+        name: shareTargetProj.name,
+        client: shareTargetProj.client,
+        location: shareTargetProj.location,
+        startDate: shareTargetProj.startDate,
+        type: shareTargetProj.type,
+        phases: shareConfig.faze ? (shareTargetProj.phases||[]) : [],
+        avize: shareConfig.avize ? (shareTargetProj.avize||[]) : [],
+      }
+      const token = await createShareLink(user.uid, shareTargetProj.id, shareConfig, projectSnapshot)
+      setShareToken(token)
     } catch(e) {
+      console.error(e)
       showToast('Eroare la generarea linkului', T.red)
+    } finally {
+      setShareLoading(false)
     }
   }
 
