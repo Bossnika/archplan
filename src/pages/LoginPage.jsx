@@ -6,9 +6,10 @@ import { useTheme } from '../hooks/useTheme.jsx'
 import { COMPANY }  from '../lib/constants.js'
 import { LogIn, UserPlus, Chrome, AlertCircle } from 'lucide-react'
 
-export default function LoginPage() {
+export default function LoginPage({ T: propT }) {
   const { loginGoogle, loginEmail, registerEmail } = useAuth()
-  const { T } = useTheme()
+  const themeCtx = useTheme()
+  const T = themeCtx?.T ?? propT ?? { bg:'#0d0f12', sidebar:'#111318', panel:'#161b22', panelHov:'#1c2230', border:'#21262d', borderLt:'#30363d', text:'#e6edf3', textMd:'#8b949e', textDim:'#484f58', accent:'#58a6ff', accentBg:'#58a6ff14', accentLt:'#79c0ff', green:'#3fb950', greenBg:'#3fb95014', amber:'#d29922', amberBg:'#d2992214', red:'#f85149', redBg:'#f8514914', blue:'#58a6ff', purple:'#bc8cff', shadow:'0 8px 32px rgba(0,0,0,.55)', shadowLg:'0 24px 64px rgba(0,0,0,.75)' }
   const [tab,    setTab]    = useState('login')
   const [email,  setEmail]  = useState('')
   const [pass,   setPass]   = useState('')

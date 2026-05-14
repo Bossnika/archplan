@@ -832,7 +832,7 @@ export default function App(){
     </div>
   );
 
-  if(!user) return <LoginPage />;
+  if(!user) return <LoginPage T={T} />;
 
   return(
     <div style={{fontFamily:"'Geist','Helvetica Neue',sans-serif",background:T.bg,height:"100vh",color:T.text,display:"flex",flexDirection:"column",overflow:"hidden"}}>
