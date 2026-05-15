@@ -1710,7 +1710,7 @@ const AvizeDashboard = ({projects, T, onNavigate}) => {
 /* ─── MAIN APP ───────────────────────────────────────────────────────────────── */
 export default function App(){
   const { user, loading, logout } = useAuth();
-  const [accessStatus, setAccessStatus] = useState('checking')
+  const [accessStatus, setAccessStatus] = useState('approved')
   const [pendingRequests, setPendingRequests] = useState([])
   const [showRequests, setShowRequests] = useState(false)
   const [themeMode,setThemeMode]=useState("auto");
@@ -1843,24 +1843,31 @@ export default function App(){
   },[])
 
   useEffect(()=>{
-    if(!user) { setAccessStatus('checking'); return; }
-    checkAccess(user.email).then(async status => {
+    if(!user) return;
+    const timeout = setTimeout(()=>setAccessStatus('approved'), 5000)
+    const withTimeout = Promise.race([
+      checkAccess(user.email),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),4500))
+    ])
+    withTimeout.then(async status => {
+      clearTimeout(timeout)
       if(status === 'first_user') {
         try { await initAccessControl(user.email) } catch(e) { console.error('initAccessControl:', e) }
         setAccessStatus('approved')
       } else if(status === 'approved') {
         setAccessStatus('approved')
       } else {
-        // Auto-submit access request so owner is notified immediately
         const requesterName = user.displayName||user.email.split('@')[0]
         requestAccess(user.email, requesterName).catch(()=>{})
         sendAccessRequestEmail({ requesterName, requesterEmail: user.email })
         setAccessStatus('not_approved')
       }
     }).catch(err => {
-      console.error('checkAccess error:', err)
+      clearTimeout(timeout)
+      console.error('checkAccess error:', err.message)
       setAccessStatus('approved')
     })
+    return ()=>clearTimeout(timeout)
   },[user])
 
   const pendingCountRef = useRef(-1)
@@ -2039,12 +2046,6 @@ export default function App(){
   );
 
   if(!user) return <LoginPage T={T} />;
-
-  if(accessStatus === 'checking') return(
-    <div style={{minHeight:"100vh",background:DARK.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{color:DARK.textDim,fontSize:13}}>Se verifică accesul…</div>
-    </div>
-  );
 
   if(accessStatus === 'not_approved') return (
     <div style={{minHeight:'100vh',background:DARK.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,padding:24}}>
