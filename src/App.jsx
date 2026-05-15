@@ -1239,6 +1239,82 @@ const PinModal=({T,onSuccess,onCancel,hint})=>{
   );
 };
 
+/* ─── CHANGE PIN MODAL ───────────────────────────────────────────────────────── */
+const ChangePinModal=({T,onClose,onChanged})=>{
+  const [cur,setCur]=useState('');
+  const [next,setNext]=useState('');
+  const [confirm,setConfirm]=useState('');
+  const [err,setErr]=useState(null);
+  const [step,setStep]=useState(1); // 1=verify current, 2=set new
+
+  const pinInp=(value,onChange,placeholder,autoFocus=false)=>(
+    <input autoFocus={autoFocus} type="password" maxLength={8} value={value}
+      onChange={e=>{onChange(e.target.value);setErr(null);}}
+      placeholder={placeholder}
+      style={{width:'100%',boxSizing:'border-box',background:T.bg,border:`1.5px solid ${err?T.red:T.borderLt}`,
+        borderRadius:8,padding:'10px 14px',color:T.text,fontSize:18,letterSpacing:6,outline:'none',
+        fontFamily:'inherit',textAlign:'center'}}/>
+  );
+
+  const verifyCurrent=()=>{
+    if(cur===getStoredPin()) setStep(2);
+    else{setErr('PIN curent incorect');setCur('');}
+  };
+  const saveNew=()=>{
+    if(next.length<4){setErr('PIN-ul trebuie să aibă minim 4 caractere');return;}
+    if(next!==confirm){setErr('PIN-urile noi nu coincid');setConfirm('');return;}
+    localStorage.setItem(ADMIN_PIN_KEY,next);
+    onChanged();
+    onClose();
+  };
+
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300}} onClick={onClose}>
+      <div style={{background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:14,padding:28,width:320,boxShadow:T.shadowLg}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+          <Lock size={15} color={T.accent}/><span style={{fontSize:15,fontWeight:700,color:T.text}}>Schimbare PIN</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:20}}>
+          {[1,2].map(s=>(
+            <div key={s} style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{width:20,height:20,borderRadius:'50%',background:step>=s?T.accent:T.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:step>=s?'#fff':T.textDim}}>{s}</div>
+              <span style={{fontSize:11,color:step===s?T.text:T.textDim}}>{s===1?'Verificare PIN curent':'PIN nou'}</span>
+              {s===1&&<div style={{width:20,height:1,background:T.border}}/>}
+            </div>
+          ))}
+        </div>
+
+        {step===1&&(
+          <>
+            <div style={{fontSize:12,color:T.textDim,marginBottom:12}}>Introduceți PIN-ul curent pentru a continua.</div>
+            {pinInp(cur,setCur,'PIN curent',true)}
+            {err&&<div style={{fontSize:11,color:T.red,textAlign:'center',marginTop:6}}>{err}</div>}
+            <div style={{display:'flex',gap:8,marginTop:16}}>
+              <button onClick={onClose} style={{flex:1,background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'8px',color:T.textMd,cursor:'pointer',fontFamily:'inherit',fontSize:12}}>Anulează</button>
+              <button onClick={verifyCurrent} style={{flex:1,background:T.accent,border:'none',borderRadius:7,padding:'8px',color:'#fff',fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:12}}>Continuă</button>
+            </div>
+          </>
+        )}
+
+        {step===2&&(
+          <>
+            <div style={{fontSize:12,color:T.textDim,marginBottom:12}}>Introduceți noul PIN (minim 4 caractere).</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {pinInp(next,setNext,'PIN nou',true)}
+              {pinInp(confirm,setConfirm,'Confirmă PIN nou')}
+            </div>
+            {err&&<div style={{fontSize:11,color:T.red,textAlign:'center',marginTop:6}}>{err}</div>}
+            <div style={{display:'flex',gap:8,marginTop:16}}>
+              <button onClick={()=>{setStep(1);setNext('');setConfirm('');setErr(null);}} style={{flex:1,background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'8px',color:T.textMd,cursor:'pointer',fontFamily:'inherit',fontSize:12}}>Înapoi</button>
+              <button onClick={saveNew} style={{flex:1,background:T.green,border:'none',borderRadius:7,padding:'8px',color:'#fff',fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:12}}>Salvează PIN</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ─── CONTRACT VIEW ─────────────────────────────────────────────────────────── */
 const ContractView = ({project, onUpdate, T}) => {
   const c = project.contract || {}
@@ -1681,6 +1757,7 @@ export default function App(){
   const [autoOpenAviz, setAutoOpenAviz] = useState(null)
   const [adminUnlocked, setAdminUnlocked] = useState(false)
   const [pinModal, setPinModal] = useState(null) // {onSuccess:fn, hint:str}
+  const [showChangePinModal, setShowChangePinModal] = useState(false)
   const ganttRef = useRef(null)
 
   const requirePin=(onSuccess,hint)=>{
@@ -2124,11 +2201,7 @@ export default function App(){
                 <div style={{padding:"7px 12px",fontSize:11,color:T.textDim,display:"flex",alignItems:"center",gap:6}}>
                   <Settings size={11}/>{COMPANY.name}
                 </div>
-                <button onClick={()=>{
-                  setUMenu(false);
-                  const np=prompt('PIN nou (minim 4 caractere):');
-                  if(np&&np.length>=4){localStorage.setItem(ADMIN_PIN_KEY,np);setAdminUnlocked(false);showToast('PIN actualizat ✓',T.green);}
-                }} style={{width:"100%",background:"transparent",border:"none",padding:"8px 12px",color:T.textMd,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:7,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
+                <button onClick={()=>{setUMenu(false);setShowChangePinModal(true);}} style={{width:"100%",background:"transparent",border:"none",padding:"8px 12px",color:T.textMd,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:7,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
                   <Lock size={13}/>Schimbă PIN financiar
                 </button>
                 <button onClick={()=>{setUMenu(false);logout();}} style={{width:"100%",background:"transparent",border:"none",padding:"8px 12px",color:T.red,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:7,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
@@ -2592,9 +2665,13 @@ export default function App(){
                     ? '⚠ Link lung — Firestore indisponibil, dar funcționează fără server'
                     : '✓ Link scurt via Firestore (recomandat)'}
                 </div>
-                <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end',flexWrap:'wrap'}}>
+                  <button onClick={()=>window.open(`${window.location.origin}/?share=${shareToken}`,'_blank')}
+                    style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'7px 12px',color:T.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+                    <ExternalLink size={11}/>Testează
+                  </button>
                   <button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/?share=${shareToken}`);showToast('Link copiat din nou!',T.green);}}
-                    style={{background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:7,padding:'7px 16px',color:T.accent,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600}}>
+                    style={{background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:7,padding:'7px 14px',color:T.accent,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600}}>
                     Copiază din nou
                   </button>
                   <button onClick={()=>{setShowShareModal(false);setShareToken(null)}} style={{background:T.accent,border:'none',borderRadius:7,padding:'7px 16px',color:'#fff',fontWeight:600,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Gata</button>
@@ -2684,8 +2761,10 @@ export default function App(){
         </div>
       )}
 
-      {/* PIN modal */}
+      {/* PIN access modal */}
       {pinModal&&<PinModal T={T} hint={pinModal.hint} onSuccess={pinModal.onSuccess} onCancel={()=>setPinModal(null)}/>}
+      {/* Change PIN modal */}
+      {showChangePinModal&&<ChangePinModal T={T} onClose={()=>setShowChangePinModal(false)} onChanged={()=>{setAdminUnlocked(false);showToast('PIN actualizat ✓',T.green);}}/>}
 
       {/* Toast */}
       {toast&&(
