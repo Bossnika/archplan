@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
-import { initializeFirestore, memoryLocalCache } from 'firebase/firestore'
+import { initializeFirestore, memoryLocalCache, enableNetwork, disableNetwork } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
@@ -31,3 +31,13 @@ export const googleProvider = new GoogleAuthProvider()
 export const messaging = null
 export async function requestPushPermission() { return null }
 export function onPushMessage() { return () => {} }
+
+// Forces Firestore to drop and immediately re-establish its server connection.
+// Call this when the page returns to the foreground so all onSnapshot listeners
+// catch up on changes made while the tab was backgrounded/suspended.
+export async function forceFirestoreSync() {
+  try {
+    await disableNetwork(db)
+    await enableNetwork(db)
+  } catch (_) { /* non-critical */ }
+}
