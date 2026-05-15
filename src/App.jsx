@@ -1638,11 +1638,18 @@ export default function App(){
           return{...ph,...upd};
         }
         if(ph.phaseId==='ph_ac_dep'){
-          // startDate = day after last aviz emission; keep existing endDate or +5d
+          // startDate = day after last aviz emission; endDate = startDate + 5 days
           const d=new Date(maxEm);d.setDate(d.getDate()+1);
           const newStart=d.toISOString().slice(0,10);
-          const newEnd=ph.endDate||(() =>{const e=new Date(maxEm);e.setDate(e.getDate()+6);return e.toISOString().slice(0,10);})();
-          return{...ph,startDate:newStart,endDate:newEnd};
+          const e=new Date(d);e.setDate(e.getDate()+5);
+          return{...ph,startDate:newStart,endDate:e.toISOString().slice(0,10)};
+        }
+        if(ph.phaseId==='ph_ac_emit'){
+          // startDate = ac_dep start + 6 days; endDate = startDate + 30 days
+          const d=new Date(maxEm);d.setDate(d.getDate()+7);
+          const newStart=d.toISOString().slice(0,10);
+          const e=new Date(d);e.setDate(e.getDate()+30);
+          return{...ph,startDate:newStart,endDate:e.toISOString().slice(0,10)};
         }
         return ph;
       });
@@ -1672,14 +1679,18 @@ export default function App(){
     };
     setShowNewProj(false);
     setNewProjName("");setNewProjClient("");setNewProjLoc("");setNewProjStart(TODAY);setNewProjType('arhitectura');
-    showToast(`Proiect "${projName}" creat`,T.green);
-    try { await createProject(user.uid,newProj) } catch(e) { console.error(e) }
+    try {
+      await createProject(user.uid,newProj);
+      showToast(`Proiect "${projName}" salvat în cloud ✓`,T.green);
+    } catch(e) {
+      console.error('createProject failed:',e);
+      showToast(`Eroare: proiectul nu a putut fi salvat — ${e.message||'verifică conexiunea'}`,T.red);
+    }
   };
 
   const handleEditProject = async () => {
     if(!editProjData||!user) return
     setShowEditProj(false)
-    showToast('Proiect actualizat', T.green)
     try {
       await updateProject(user.uid, editProjData.id, {
         name: editProjData.name,
@@ -1688,7 +1699,11 @@ export default function App(){
         startDate: editProjData.startDate,
         type: editProjData.type,
       })
-    } catch(e) { console.error(e) }
+      showToast('Proiect actualizat ✓', T.green)
+    } catch(e) {
+      console.error('handleEditProject failed:',e);
+      showToast('Eroare la salvare — verifică conexiunea',T.red);
+    }
   }
 
   const handleDeleteProject = async () => {
