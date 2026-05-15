@@ -7,7 +7,7 @@ import {
   Download, Upload, Link2, ExternalLink, X, Calendar, Map, Settings,
   PanelLeftClose, PanelLeftOpen, LogOut, MessageSquare, Send, Paperclip,
   AtSign, Hash, Users, UserPlus, Trash2, CheckSquare, Zap, Flame,
-  Droplets, Radio, Leaf, ChevronDown, MoreVertical
+  Droplets, Radio, Leaf, ChevronDown, MoreVertical, Lock
 } from "lucide-react";
 import { useAuth } from './hooks/useAuth.jsx'
 import { COMPANY } from './lib/constants.js'
@@ -273,40 +273,72 @@ const MsgText=({text,T})=>{
 };
 /* ─── GANTT ──────────────────────────────────────────────────────────────────── */
 const Gantt=({phases,T})=>{
+  if(!phases||phases.length===0) return null;
   const total=Math.max(1,diffD(phases[0].startDate,phases[phases.length-1].endDate));
   const tp=Math.min(100,Math.max(0,diffD(phases[0].startDate,TODAY)/total*100));
   return(
     <div style={{overflowX:"auto"}}>
-      <div style={{minWidth:540}}>
-        <div style={{display:"flex",paddingLeft:188,marginBottom:8}}>
+      <div style={{minWidth:560}}>
+        <div style={{display:"flex",paddingLeft:192,paddingRight:76,marginBottom:6}}>
           <span style={{fontSize:10,color:T.textDim,flex:1}}>{fmt(phases[0].startDate)}</span>
           <span style={{fontSize:10,color:T.textDim}}>{fmt(phases[phases.length-1].endDate)}</span>
         </div>
         {phases.map(ph=>{
           const l=diffD(phases[0].startDate,ph.startDate)/total*100;
-          const w=Math.max(.8,diffD(ph.startDate,ph.endDate)/total*100);
+          const w=Math.max(.5,diffD(ph.startDate,ph.endDate)/total*100);
           const c=GC[ph.group]||T.accent;
+          const done=ph.status==="approved";
           return(
-            <div key={ph.phaseId} style={{display:"flex",alignItems:"center",marginBottom:5}}>
-              <div style={{width:188,flexShrink:0,paddingRight:10}}>
+            <div key={ph.phaseId} style={{display:"flex",alignItems:"center",marginBottom:6}}>
+              <div style={{width:192,flexShrink:0,paddingRight:10}}>
                 <div style={{fontSize:11,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ph.name}</div>
-                <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap',marginTop:2}}>
+                <div style={{display:'flex',gap:4,alignItems:'center',marginTop:1}}>
                   <Chip label={ph.group} color={c} T={T}/>
                   {ph.dependsOn&&phases.find(p=>p.phaseId===ph.dependsOn)&&(
                     <span style={{fontSize:9,color:T.textDim}}>↳{phases.find(p=>p.phaseId===ph.dependsOn).name.slice(0,14)}</span>
                   )}
                 </div>
               </div>
-              <div style={{flex:1,height:20,background:T.border,borderRadius:3,position:"relative",overflow:"hidden"}}>
-                <div style={{position:"absolute",left:`${l}%`,width:`${w}%`,height:"100%",background:ph.status==="approved"?c:`${c}44`,border:`1px solid ${c}66`,borderRadius:3}}/>
-                <div style={{position:"absolute",left:`${tp}%`,top:0,bottom:0,width:1.5,background:T.red,zIndex:2}}/>
+              <div style={{flex:1,height:26,background:T.border,borderRadius:4,position:"relative",overflow:"visible"}}>
+                {/* Phase bar */}
+                <div style={{
+                  position:"absolute",left:`${l}%`,width:`${w}%`,height:"100%",
+                  background:done?c:`${c}55`,border:`1px solid ${done?c:c+'88'}`,
+                  borderRadius:4,overflow:"hidden",minWidth:2,
+                  display:"flex",alignItems:"center",
+                }}>
+                  {w>=14&&(
+                    <div style={{display:"flex",width:"100%",alignItems:"center",
+                      justifyContent:w>=26?"space-between":"flex-end",padding:"0 5px",gap:3}}>
+                      {w>=26&&<span style={{fontSize:8,color:done?"#ffffffcc":c,fontWeight:600,whiteSpace:"nowrap",lineHeight:1}}>{fmtS(ph.startDate)}</span>}
+                      <span style={{fontSize:8,color:done?"#ffffffcc":c,fontWeight:600,whiteSpace:"nowrap",lineHeight:1}}>{fmtS(ph.endDate)}</span>
+                    </div>
+                  )}
+                </div>
+                {/* Today line */}
+                <div style={{position:"absolute",left:`${tp}%`,top:-3,bottom:-3,width:1.5,background:T.red,zIndex:3,borderRadius:1}}/>
               </div>
-              <div style={{width:44,textAlign:"right",fontSize:10,color:ph.status==="approved"?T.green:T.textDim,paddingLeft:8}}>
-                {ph.status==="approved"?<CheckCircle size={11} color={T.green}/>:fmtS(ph.endDate)}
+              {/* Dates column */}
+              <div style={{width:72,paddingLeft:8,flexShrink:0}}>
+                {done?(
+                  <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"flex-end"}}>
+                    <CheckCircle size={11} color={T.green}/>
+                    <span style={{fontSize:10,color:T.green,fontWeight:600}}>Gata</span>
+                  </div>
+                ):(
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:9,color:T.textDim}}>{fmtS(ph.startDate)}</div>
+                    <div style={{fontSize:10,fontWeight:600,color:diffD(TODAY,ph.endDate)<0?T.red:diffD(TODAY,ph.endDate)<=7?T.amber:T.text}}>{fmtS(ph.endDate)}</div>
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
+        <div style={{paddingLeft:192,paddingRight:76,marginTop:4,display:'flex',alignItems:'center',gap:6}}>
+          <div style={{height:1.5,background:T.red,width:16}}/>
+          <span style={{fontSize:9,color:T.textDim}}>Azi — {fmt(TODAY)}</span>
+        </div>
       </div>
     </div>
   );
@@ -361,10 +393,13 @@ const SharedView = ({ token }) => {
         setData({ project: { name: decoded.n, client: decoded.c, location: decoded.l, startDate: decoded.s, phases: decoded.ph||[], avize: decoded.av||[], type: decoded.t||'arhitectura', clientNote: decoded.note||'' }, config: decoded.cfg || {faze:true,avize:true} })
       } catch(e) { setErr(true) }
     } else {
-      // Short token = Firestore stored share
-      getSharedProject(token)
-        .then(r => { if(r) setData(r); else setErr('Link invalid sau expirat.') })
-        .catch(e=>setErr(`Eroare: ${e.code||e.message||'necunoscut'}`))
+      // Short token = Firestore stored share — retry up to 3 times
+      const tryLoad=(attempt=0)=>{
+        getSharedProject(token)
+          .then(r=>{ if(r) setData(r); else if(attempt<2) setTimeout(()=>tryLoad(attempt+1),1500); else setErr('Link invalid sau expirat.'); })
+          .catch(e=>{ if(attempt<2) setTimeout(()=>tryLoad(attempt+1),1500); else setErr(`Eroare: ${e.code||e.message||'necunoscut'}`); });
+      };
+      tryLoad();
     }
   }, [token])
 
@@ -1168,8 +1203,41 @@ const TABS=[
   {id:"avize",    label:"Avize",    I:Building2},
   {id:"gantt",    label:"Timeline", I:BarChart2},
   {id:"chat",     label:"Chat",     I:MessageSquare},
-  {id:"contract", label:"Contract", I:FileText},
+  {id:"contract", label:"Contract", I:FileText,    locked:true},
 ];
+const PROTECTED_NAV=['financiar'];
+const ADMIN_PIN_KEY='archplan_admin_pin';
+const getStoredPin=()=>localStorage.getItem(ADMIN_PIN_KEY)||'1234';
+
+/* ─── PIN MODAL ──────────────────────────────────────────────────────────────── */
+const PinModal=({T,onSuccess,onCancel,hint})=>{
+  const [val,setVal]=useState('');
+  const [err,setErr]=useState(false);
+  const check=()=>{
+    if(val===getStoredPin()){setErr(false);onSuccess();}
+    else{setErr(true);setVal('');}
+  };
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300}} onClick={onCancel}>
+      <div style={{background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:14,padding:28,width:300,boxShadow:T.shadowLg}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+          <Lock size={15} color={T.amber}/><span style={{fontSize:15,fontWeight:700,color:T.text}}>Zonă restricționată</span>
+        </div>
+        <div style={{fontSize:12,color:T.textDim,marginBottom:18}}>{hint||'Introduceți PIN-ul pentru a accesa.'}</div>
+        <input autoFocus type="password" maxLength={8} value={val}
+          onChange={e=>{setVal(e.target.value);setErr(false);}}
+          onKeyDown={e=>e.key==='Enter'&&check()}
+          placeholder="PIN"
+          style={{width:'100%',boxSizing:'border-box',background:T.bg,border:`1.5px solid ${err?T.red:T.borderLt}`,borderRadius:8,padding:'10px 14px',color:T.text,fontSize:20,letterSpacing:8,outline:'none',fontFamily:'inherit',textAlign:'center',marginBottom:err?4:14}}/>
+        {err&&<div style={{fontSize:11,color:T.red,textAlign:'center',marginBottom:10}}>PIN incorect</div>}
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={onCancel} style={{flex:1,background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'8px',color:T.textMd,cursor:'pointer',fontFamily:'inherit',fontSize:12}}>Anulează</button>
+          <button onClick={check} style={{flex:1,background:T.accent,border:'none',borderRadius:7,padding:'8px',color:'#fff',fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:12}}>Accesează</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /* ─── CONTRACT VIEW ─────────────────────────────────────────────────────────── */
 const ContractView = ({project, onUpdate, T}) => {
@@ -1612,7 +1680,14 @@ export default function App(){
   const [approvedUsers, setApprovedUsers] = useState([])
   const [chatSeenProjects, setChatSeenProjects] = useState(new Set())
   const [autoOpenAviz, setAutoOpenAviz] = useState(null)
+  const [adminUnlocked, setAdminUnlocked] = useState(false)
+  const [pinModal, setPinModal] = useState(null) // {onSuccess:fn, hint:str}
   const ganttRef = useRef(null)
+
+  const requirePin=(onSuccess,hint)=>{
+    if(adminUnlocked){ onSuccess(); return; }
+    setPinModal({onSuccess:()=>{setAdminUnlocked(true);setPinModal(null);onSuccess();},hint});
+  };
 
   // Browser back/forward support
   useEffect(()=>{
@@ -1934,16 +2009,16 @@ export default function App(){
                 {id:'arhitectura', label:'Arhitectură', color:'#f85149'},
                 {id:'urbanism',    label:'Urbanism',    color:'#3fb950'},
                 {id:'avize',       label:'Avize',       color:'#58a6ff'},
-                {id:'financiar',   label:'Financiar',   color:'#d29922'},
+                {id:'financiar',   label:'Financiar',   color:'#d29922', locked:true},
               ].map(s=>(
-                <button key={s.id} onClick={()=>setNavSection(s.id)}
+                <button key={s.id} onClick={()=>s.locked?requirePin(()=>setNavSection(s.id),'Secțiunea financiară este protejată.'):setNavSection(s.id)}
                   style={{background:navSection===s.id?(s.color?`${s.color}18`:T.accentBg):'transparent',
                     border:`1px solid ${navSection===s.id?(s.color||T.accent)+'44':'transparent'}`,
                     borderRadius:6,padding:'4px 10px',
                     color:navSection===s.id?(s.color||T.accent):T.textDim,
                     cursor:'pointer',fontSize:11,fontWeight:navSection===s.id?600:400,
                     fontFamily:'inherit',transition:'all .12s',whiteSpace:'nowrap'}}>
-                  {s.label}
+                  {s.locked&&!adminUnlocked&&<Lock size={9} style={{marginRight:3,verticalAlign:'middle'}}/>}{s.label}
                 </button>
               ))}
             </div>
@@ -2044,6 +2119,13 @@ export default function App(){
                 <div style={{padding:"7px 12px",fontSize:11,color:T.textDim,display:"flex",alignItems:"center",gap:6}}>
                   <Settings size={11}/>{COMPANY.name}
                 </div>
+                <button onClick={()=>{
+                  setUMenu(false);
+                  const np=prompt('PIN nou (minim 4 caractere):');
+                  if(np&&np.length>=4){localStorage.setItem(ADMIN_PIN_KEY,np);setAdminUnlocked(false);showToast('PIN actualizat ✓',T.green);}
+                }} style={{width:"100%",background:"transparent",border:"none",padding:"8px 12px",color:T.textMd,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:7,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
+                  <Lock size={13}/>Schimbă PIN financiar
+                </button>
                 <button onClick={()=>{setUMenu(false);logout();}} style={{width:"100%",background:"transparent",border:"none",padding:"8px 12px",color:T.red,cursor:"pointer",fontSize:12,textAlign:"left",borderRadius:7,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}>
                   <LogOut size={13}/>Deconectare
                 </button>
@@ -2336,9 +2418,9 @@ export default function App(){
                   </div>
                   <div style={{display:"flex",background:T.sidebar,borderRadius:8,padding:3,border:`1px solid ${T.border}`,gap:2}}>
                     {TABS.map(t=>(
-                      <button key={t.id} onClick={()=>setTab(t.id)}
+                      <button key={t.id} onClick={()=>t.locked?requirePin(()=>setTab(t.id),`Tabul "${t.label}" este protejat.`):setTab(t.id)}
                         style={{display:"flex",alignItems:"center",gap:5,background:tab===t.id?T.panel:"transparent",border:`1px solid ${tab===t.id?T.border:"transparent"}`,borderRadius:6,padding:"5px 11px",color:tab===t.id?T.text:T.textDim,cursor:"pointer",fontSize:11,fontWeight:tab===t.id?600:400,fontFamily:"inherit",transition:"all .12s"}}>
-                        <t.I size={12}/>{t.label}
+                        {t.locked&&!adminUnlocked?<Lock size={11}/>:<t.I size={12}/>}{t.label}
                         {t.id==="chat"&&<span style={{width:6,height:6,borderRadius:"50%",background:T.accent,display:"block"}}/>}
                       </button>
                     ))}
@@ -2596,6 +2678,9 @@ export default function App(){
           </div>
         </div>
       )}
+
+      {/* PIN modal */}
+      {pinModal&&<PinModal T={T} hint={pinModal.hint} onSuccess={pinModal.onSuccess} onCancel={()=>setPinModal(null)}/>}
 
       {/* Toast */}
       {toast&&(
