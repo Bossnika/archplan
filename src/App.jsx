@@ -57,6 +57,13 @@ const STATUS_META = {
   approved:   {label:"Finalizat",  Icon:CheckCircle, color:"#3fb950"},
   rejected:   {label:"Respins",    Icon:AlertCircle, color:"#f85149"},
 };
+const AVIZ_STATUSES=[
+  {id:'in_progress',label:'În lucru',        color:'#58a6ff'},
+  {id:'blocked',    label:'Blocat',          color:'#f85149'},
+  {id:'ready',      label:'Se poate ridica', color:'#d29922'},
+  {id:'approved',   label:'Obținut',         color:'#3fb950'},
+  {id:'picked_up',  label:'Ridicat',         color:'#bc8cff'},
+];
 const CHANNELS = [
   {id:"general",label:"General",   Icon:MessageSquare},
   {id:"cu",     label:"CU",        Icon:FileText},
@@ -163,7 +170,7 @@ const cascadeForward=(phases,fromPhId,fromEndDate,avize=[])=>{
       continue;
     }
     if(phaseId==='ph_av_obt'&&emOrEst.length>0){
-      const allDone=avize.every(av=>av.emissionDate||av.status==='approved');
+      const allDone=avize.every(av=>av.emissionDate||av.status==='approved'||av.status==='picked_up'||av.status==='ready');
       result[idx]={...result[idx],startDate:emOrEst[0],endDate:emOrEst[emOrEst.length-1],...(allDone?{status:'approved'}:{})};
       prevEnd=emOrEst[emOrEst.length-1];
       continue;
@@ -336,7 +343,7 @@ const MultiProg=({phases,T})=>{
 /* ─── SHARED PROJECT VIEW ────────────────────────────────────────────────────── */
 const SharedView = ({ token }) => {
   const [data, setData] = useState(null)
-  const [err,  setErr]  = useState(false)
+  const [err,  setErr]  = useState(null)
   const T = DARK
 
   useEffect(() => {
@@ -355,13 +362,16 @@ const SharedView = ({ token }) => {
       } catch(e) { setErr(true) }
     } else {
       // Short token = Firestore stored share
-      getSharedProject(token).then(r => { if(r) setData(r); else setErr(true) }).catch(()=>setErr(true))
+      getSharedProject(token)
+        .then(r => { if(r) setData(r); else setErr('Link invalid sau expirat.') })
+        .catch(e=>setErr(`Eroare: ${e.code||e.message||'necunoscut'}`))
     }
   }, [token])
 
   if (err) return (
     <div style={{minHeight:'100vh',background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12}}>
-      <div style={{color:T.red,fontSize:14,fontWeight:600}}>Link invalid sau expirat.</div>
+      <div style={{color:T.red,fontSize:14,fontWeight:600}}>{err}</div>
+      <div style={{fontSize:11,color:T.textDim}}>Dacă ai primit acest link, roagă expeditorul să genereze unul nou.</div>
     </div>
   )
   if (!data) return (
@@ -986,7 +996,15 @@ const PhasesView=({project,onUpdate,T})=>{
 /* ─── AVIZE VIEW ─────────────────────────────────────────────────────────────── */
 const AvizeView=({project,onUpdate,T,autoOpenAviz})=>{
   const [open,setOpen]=useState(null);
+  const [statusMenu,setStatusMenu]=useState(null);
   useEffect(()=>{if(autoOpenAviz) setOpen(autoOpenAviz);},[autoOpenAviz]);
+  useEffect(()=>{
+    if(!statusMenu) return;
+    const close=()=>setStatusMenu(null);
+    document.addEventListener('click',close);
+    return()=>document.removeEventListener('click',close);
+  },[statusMenu]);
+  const avizStatusInfo=(s)=>AVIZ_STATUSES.find(x=>x.id===s)||{label:'De obținut',color:'#484f58'};
   return(
     <div style={{display:"flex",flexDirection:"column",gap:6}}>
       {project.avize.map(av=>{
@@ -994,7 +1012,7 @@ const AvizeView=({project,onUpdate,T,autoOpenAviz})=>{
         const ds=av.steps.filter(s=>s.status==="approved").length;
         const pv=Math.round(ds/av.steps.length*100);
         const isOpen=open===av.avizId;
-        const isApproved=av.status==='approved';
+        const isApproved=av.status==='approved'||av.status==='picked_up';
         return(
           <div key={av.avizId} style={{border:`1px solid ${isApproved?T.green+'44':isOpen?inst.color+'44':T.border}`,borderRadius:10,overflow:"hidden",background:T.panel,transition:"border-color .2s"}}>
             <div onClick={()=>setOpen(isOpen?null:av.avizId)}
@@ -1014,22 +1032,47 @@ const AvizeView=({project,onUpdate,T,autoOpenAviz})=>{
               </div>
               <MiniProg val={pv} color={isApproved?T.green:inst.color} w={70} T={T}/>
               <span style={{fontSize:11,color:T.textDim}}>{ds}/{av.steps.length} pași</span>
-              {/* "Obținut" toggle — click does NOT open panel */}
-              <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center"}}>
-                <button onClick={()=>{
-                  const upd={status:isApproved?'in_progress':'approved'};
-                  if(!isApproved&&!av.emissionDate) upd.emissionDate=TODAY;
-                  onUpdate(av.avizId,upd);
-                }} style={{
+              {/* Multi-state status dropdown */}
+              <div onClick={e=>e.stopPropagation()} style={{position:'relative',display:'flex',alignItems:'center'}}>
+                <button onClick={()=>setStatusMenu(statusMenu===av.avizId?null:av.avizId)} style={{
                   display:'flex',alignItems:'center',gap:5,
-                  background:isApproved?`${T.green}18`:`${T.accent}12`,
-                  border:`1px solid ${isApproved?T.green:T.accent}44`,
+                  background:`${avizStatusInfo(av.status).color}18`,
+                  border:`1px solid ${avizStatusInfo(av.status).color}44`,
                   borderRadius:6,padding:'5px 10px',
-                  color:isApproved?T.green:T.accent,
+                  color:avizStatusInfo(av.status).color,
                   cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit',whiteSpace:'nowrap',
                 }}>
-                  {isApproved?<><CheckCircle size={12}/>Obținut</>:<><Circle size={12}/>Marchează obținut</>}
+                  <div style={{width:7,height:7,borderRadius:'50%',background:avizStatusInfo(av.status).color,flexShrink:0}}/>
+                  {avizStatusInfo(av.status).label}
+                  <ChevronDown size={10}/>
                 </button>
+                {statusMenu===av.avizId&&(
+                  <div onClick={e=>e.stopPropagation()} style={{
+                    position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:50,
+                    background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:8,
+                    boxShadow:T.shadowLg,minWidth:170,overflow:'hidden',
+                  }}>
+                    {AVIZ_STATUSES.map(s=>{
+                      const isCur=av.status===s.id;
+                      return(
+                        <div key={s.id} onClick={()=>{
+                          const upd={status:s.id};
+                          if(s.id==='ready'||s.id==='approved'||s.id==='picked_up'){if(!av.emissionDate) upd.emissionDate=TODAY;}
+                          else{upd.emissionDate=null;}
+                          onUpdate(av.avizId,upd);
+                          setStatusMenu(null);
+                        }} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',fontSize:12,
+                          background:isCur?`${s.color}15`:'transparent',color:isCur?s.color:T.text,transition:'background .1s'}}
+                          onMouseEnter={e=>e.currentTarget.style.background=`${s.color}20`}
+                          onMouseLeave={e=>e.currentTarget.style.background=isCur?`${s.color}15`:'transparent'}>
+                          <div style={{width:8,height:8,borderRadius:'50%',background:s.color,flexShrink:0}}/>
+                          <span style={{flex:1}}>{s.label}</span>
+                          {isCur&&<CheckCircle size={11} color={s.color}/>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               {isOpen?<ChevronDown size={14} color={T.textDim}/>:<ChevronRight size={14} color={T.textDim}/>}
             </div>
@@ -1588,12 +1631,15 @@ export default function App(){
     if(avizId){setAutoOpenAviz(avizId);}else{setAutoOpenAviz(null);}
   };
 
+  const [projectsReady,setProjectsReady]=useState(false);
+  const [projectsError,setProjectsError]=useState(null);
   useEffect(()=>{
-    if(!user) return;
+    if(!user){setProjectsReady(false);setProjectsError(null);return;}
+    setProjectsReady(false);setProjectsError(null);
     const unsub=listenProjects(
       user.uid,
-      setProjects,
-      (err)=>showToast(`Firestore: ${err.code} — ${err.message}`, T.red)
+      (ps)=>{setProjects(ps);setProjectsReady(true);setProjectsError(null);},
+      (err)=>{setProjectsError(err.code||err.message);showToast(`Firestore: ${err.code}`,T.red);}
     );
     return unsub;
   },[user]);
@@ -1651,7 +1697,7 @@ export default function App(){
   },[accessStatus, user])
 
   useEffect(()=>{
-    const close = ()=>{ setProjMenuId(null); setUMenu(false); }
+    const close = ()=>{ setProjMenuId(null); setUMenu(false); setShowAlertMenu(false); }
     document.addEventListener('click', close)
     return ()=>document.removeEventListener('click', close)
   },[])
@@ -1660,7 +1706,8 @@ export default function App(){
 
   const sel=projects.find(p=>p.id===selId);
   const filt=projects.filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase())||(p.client||"").toLowerCase().includes(search.toLowerCase()));
-  const alerts=projects.flatMap(p=>(p.phases||[]).filter(ph=>ph.status!=="approved"&&ph.status!=="rejected"&&diffD(TODAY,ph.endDate)>=0&&diffD(TODAY,ph.endDate)<=7).map(ph=>({pn:p.name,ph:ph.name,d:diffD(TODAY,ph.endDate)})));
+  const alerts=projects.flatMap(p=>(p.phases||[]).filter(ph=>ph.status!=="approved"&&ph.status!=="rejected"&&diffD(TODAY,ph.endDate)>=0&&diffD(TODAY,ph.endDate)<=7).map(ph=>({projId:p.id,pn:p.name,ph:ph.name,d:diffD(TODAY,ph.endDate)})));
+  const [showAlertMenu,setShowAlertMenu]=useState(false);
 
   const updPhase=(projId,phId,data)=>{
     const proj=projects.find(p=>p.id===projId);
@@ -1903,9 +1950,37 @@ export default function App(){
           )}
         </div>
         {alerts.length>0&&(
-          <div style={{display:"flex",alignItems:"center",gap:5,background:T.amberBg,border:`1px solid ${T.amber}44`,borderRadius:6,padding:"3px 10px",flexShrink:0}}>
-            <AlertTriangle size={11} color={T.amber}/>
-            <span style={{fontSize:11,color:T.amber,fontWeight:600}}>{alerts.length} termen{alerts.length>1?"e":""}</span>
+          <div style={{position:'relative',flexShrink:0}}>
+            <button onClick={e=>{e.stopPropagation();setShowAlertMenu(v=>!v);}} style={{
+              display:"flex",alignItems:"center",gap:5,background:T.amberBg,border:`1px solid ${T.amber}44`,
+              borderRadius:6,padding:"3px 10px",cursor:'pointer',fontFamily:'inherit',
+            }}>
+              <AlertTriangle size={11} color={T.amber}/>
+              <span style={{fontSize:11,color:T.amber,fontWeight:600}}>{alerts.length} termen{alerts.length>1?"e":""}</span>
+            </button>
+            {showAlertMenu&&(
+              <div onClick={e=>e.stopPropagation()} style={{
+                position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:100,
+                background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:8,
+                boxShadow:T.shadowLg,minWidth:240,overflow:'hidden',
+              }}>
+                <div style={{padding:'8px 12px',fontSize:10,fontWeight:700,color:T.textDim,textTransform:'uppercase',letterSpacing:.7,borderBottom:`1px solid ${T.border}`}}>Termene aproape</div>
+                {alerts.map((a,i)=>(
+                  <div key={i} onClick={()=>{navTo(a.projId,'faze');setShowAlertMenu(false);}} style={{
+                    padding:'9px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,
+                    borderBottom:i<alerts.length-1?`1px solid ${T.border}`:'none',
+                  }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.panelHov}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:11,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.pn}</div>
+                      <div style={{fontSize:10,color:T.textDim,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.ph}</div>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,color:a.d===0?T.red:T.amber,flexShrink:0}}>{a.d===0?'Azi':`${a.d}z`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         <button onClick={()=>{if(sel){setTab('chat')}else{showToast('Selectează un proiect pentru chat',T.amber)}}}
@@ -1955,7 +2030,7 @@ export default function App(){
                   {[
                     {l:"Proiecte",v:projects.length},
                     {l:"Active",v:projects.filter(p=>pctOf(p.phases)<100).length},
-                    {l:"Avize",v:projects.reduce((s,p)=>(p.avize||[]).filter(a=>a.status==="approved").length+s,0)},
+                    {l:"Avize",v:projects.reduce((s,p)=>(p.avize||[]).filter(a=>a.status==="approved"||a.status==="picked_up").length+s,0)},
                   ].map(s=>(
                     <div key={s.l} style={{background:T.bg,borderRadius:7,padding:"7px 8px",textAlign:"center",border:`1px solid ${T.border}`}}>
                       <div style={{fontSize:16,fontWeight:800,color:T.accent}}>{s.v}</div>
@@ -1995,9 +2070,23 @@ export default function App(){
           </div>
           {!coll&&<div style={{padding:"8px 14px 2px",fontSize:9,fontWeight:700,color:T.textDim,textTransform:"uppercase",letterSpacing:1}}>Proiecte ({filt.length})</div>}
           <div style={{overflowY:"auto",flex:1,paddingBottom:8}}>
+            {!projectsReady&&!projectsError&&user&&(
+              <div style={{padding:'20px 14px',textAlign:'center'}}>
+                <div style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${T.accent}`,borderTopColor:'transparent',animation:'spin .8s linear infinite',margin:'0 auto 8px'}}/>
+                <div style={{fontSize:11,color:T.textDim}}>Se sincronizează…</div>
+                <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+              </div>
+            )}
+            {projectsError&&(
+              <div style={{padding:'16px 14px',textAlign:'center'}}>
+                <div style={{fontSize:11,color:T.red,marginBottom:8}}>Eroare conexiune Firestore</div>
+                <div style={{fontSize:10,color:T.textDim,marginBottom:10,wordBreak:'break-all'}}>{projectsError}</div>
+                <button onClick={()=>{setProjectsReady(false);setProjectsError(null);}} style={{fontSize:11,background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:6,padding:'4px 12px',color:T.accent,cursor:'pointer',fontFamily:'inherit'}}>Reîncearcă</button>
+              </div>
+            )}
             {filt.map(p=>{
               const pc=pctOf(p.phases),next=p.phases.find(ph=>ph.status!=="approved"&&ph.status!=="rejected"),ov=next&&diffD(TODAY,next.endDate)<0;
-              const avDone=(p.avize||[]).filter(av=>av.status==="approved").length;
+              const avDone=(p.avize||[]).filter(av=>av.status==="approved"||av.status==="picked_up").length;
               if(coll) return(
                 <div key={p.id} onClick={()=>navTo(p.id,'faze')} title={p.name}
                   style={{padding:8,display:"flex",justifyContent:"center",cursor:"pointer",borderRadius:7,margin:"2px 6px",background:selId===p.id&&!showRem?`${T.accent}14`:"transparent"}}>
