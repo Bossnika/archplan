@@ -1,0 +1,53 @@
+; ============================================================
+; SCRIPT INITIALIZARE PROIECT NOU — Studio Office Kolectiv
+; Ruleaza din AutoCAD: File > Run Script > selecteaza acest .scr
+; ============================================================
+
+; Unitati metrice
+_UNITS
+2
+3
+1
+0
+4
+N
+
+; Limite desen (format A1 la 1:100)
+_LIMITS
+0,0
+84100,59400
+
+; Scara text default
+_TEXTSIZE
+250
+
+; Linetype scale
+_LTSCALE
+100
+
+; Dimscale
+_DIMSCALE
+100
+
+; Grosime linie curenta = 0.35
+_LWEIGHT
+_LWDEFAULT
+0.35
+
+; Snap si Grid
+_SNAP
+100
+
+_GRID
+100
+
+; Object snaps recomandate
+_OSNAP
+_ENDPOINT,_MIDPOINT,_CENTER,_INTERSECTION,_PERPENDICULAR,_QUADRANT
+
+; Zoom pe limite
+_ZOOM
+_EXTENTS
+
+; Mesaj final
+; Ruleaza KOL-INIT pentru a incarca toate modulele Kolectiv
