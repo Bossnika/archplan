@@ -72,6 +72,57 @@ function highlightMentions(text) {
   )
 }
 
+function buildAccessRequestEmailHtml({ requesterName, requesterEmail, appUrl }) {
+  return `<!DOCTYPE html>
+<html lang="ro">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f6f8fa;font-family:-apple-system,'Geist','Helvetica Neue',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f8fa;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="540" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #d0d7de;border-radius:12px;overflow:hidden;max-width:540px;">
+        <tr><td style="background:linear-gradient(135deg,#0969da,#8250df);padding:22px 28px;">
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="width:34px;height:34px;background:rgba(255,255,255,.18);border-radius:9px;text-align:center;vertical-align:middle;padding:7px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </td>
+            <td style="padding-left:12px;">
+              <div style="color:#fff;font-size:16px;font-weight:700;letter-spacing:-.3px;">ArchPlan</div>
+              <div style="color:rgba(255,255,255,.7);font-size:11px;margin-top:1px;">${COMPANY.name}</div>
+            </td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:26px 28px 20px;">
+          <p style="margin:0 0 6px;font-size:16px;font-weight:700;color:#24292f;">Cerere nouă de acces</p>
+          <p style="margin:0 0 18px;font-size:13px;color:#57606a;line-height:1.6;">
+            Un utilizator nou a solicitat acces în platforma ArchPlan și așteaptă aprobarea ta.
+          </p>
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-left:3px solid #0969da;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:22px;">
+            <div style="font-size:11px;font-weight:600;color:#8c959f;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Detalii utilizator</div>
+            <div style="font-size:14px;color:#24292f;margin-bottom:4px;"><strong>Nume:</strong> ${escHtml(requesterName)}</div>
+            <div style="font-size:14px;color:#24292f;"><strong>Email:</strong> ${escHtml(requesterEmail)}</div>
+          </div>
+          <p style="margin:0 0 18px;font-size:13px;color:#57606a;line-height:1.6;">
+            Autentifică-te în ArchPlan și aprobă sau respinge cererea din secțiunea <strong style="color:#24292f;">Cereri de acces</strong>.
+            Odată aprobat, specifică la ce proiecte are acces noul utilizator.
+          </p>
+          <a href="${appUrl}" style="display:inline-block;background:#0969da;color:#fff;text-decoration:none;border-radius:8px;padding:11px 22px;font-size:13px;font-weight:700;letter-spacing:-.1px;">
+            Deschide ArchPlan →
+          </a>
+        </td></tr>
+        <tr><td style="background:#f6f8fa;border-top:1px solid #d0d7de;padding:14px 28px;">
+          <p style="margin:0;font-size:11px;color:#8c959f;line-height:1.6;">
+            ${COMPANY.name} ·
+            <a href="https://${COMPANY.site}" style="color:#0969da;text-decoration:none;">${COMPANY.site}</a>
+            · Notificare automată generată de ArchPlan.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
 function buildEmailHtml({ mentionedBy, projectName, channel, messageText, appUrl }) {
   const chanLabel = CHANNEL_LABELS[channel] || channel
   return `<!DOCTYPE html>
@@ -165,19 +216,27 @@ export default {
       return json({ error: 'Body JSON invalid' }, 400)
     }
 
-    const { toEmail, toName, mentionedBy, projectName, channel, messageText } = body
-    if (!toEmail) return json({ error: 'toEmail lipsă' }, 400)
+    const { type, toEmail, toName, mentionedBy, projectName, channel, messageText,
+            requesterName, requesterEmail } = body
 
-    const appUrl    = env.APP_URL || 'https://app.studiokolectiv.ro'
-    const chanLabel = CHANNEL_LABELS[channel] || channel
+    const appUrl = env.APP_URL || 'https://app.studiokolectiv.ro'
 
-    const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method:  'POST',
-      headers: {
-        Authorization:  `Bearer ${env.SENDGRID_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    let sgBody
+    if (type === 'access_request') {
+      const adminEmail = env.ADMIN_EMAIL || 'marketing.kolectiv@gmail.com'
+      sgBody = {
+        to:      [{ email: adminEmail }],
+        from:    { email: `notifications@${COMPANY.site}`, name: `ArchPlan — ${COMPANY.name}` },
+        subject: `Cerere acces ArchPlan — ${requesterName || requesterEmail}`,
+        content: [
+          { type: 'text/html',  value: buildAccessRequestEmailHtml({ requesterName: requesterName || requesterEmail, requesterEmail, appUrl }) },
+          { type: 'text/plain', value: `Cerere nouă de acces în ArchPlan.\n\nNume: ${requesterName || requesterEmail}\nEmail: ${requesterEmail}\n\nIntră în aplicație pentru a aproba sau respinge cererea: ${appUrl}` },
+        ],
+      }
+    } else {
+      if (!toEmail) return json({ error: 'toEmail lipsă' }, 400)
+      const chanLabel = CHANNEL_LABELS[channel] || channel
+      sgBody = {
         to:      [{ email: toEmail }],
         from:    { email: `notifications@${COMPANY.site}`, name: `ArchPlan — ${COMPANY.name}` },
         subject: `@${toName} — ai fost menționat în ${projectName}`,
@@ -185,7 +244,16 @@ export default {
           { type: 'text/html',  value: buildEmailHtml({ mentionedBy, projectName, channel, messageText, appUrl }) },
           { type: 'text/plain', value: `Ai fost menționat în ${projectName} (#${chanLabel}) de ${mentionedBy}:\n\n"${messageText}"\n\nDeschide ArchPlan: ${appUrl}` },
         ],
-      }),
+      }
+    }
+
+    const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${env.SENDGRID_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(sgBody),
     })
 
     if (!sgRes.ok) {

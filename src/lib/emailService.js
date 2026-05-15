@@ -8,6 +8,33 @@ import { getAuth } from 'firebase/auth'
 
 const WORKER_URL = import.meta.env.VITE_NOTIFY_WORKER_URL
 
+export async function sendAccessRequestEmail({ requesterName, requesterEmail }) {
+  if (!WORKER_URL) return
+
+  try {
+    const user = getAuth().currentUser
+    if (!user) return
+
+    const token = await user.getIdToken()
+
+    const res = await fetch(WORKER_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ type: 'access_request', requesterName, requesterEmail }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error ?? `HTTP ${res.status}`)
+    }
+  } catch (err) {
+    console.warn('Access request email failed (non-critical):', err.message)
+  }
+}
+
 export async function sendMentionEmail(params) {
   if (!WORKER_URL) return
 

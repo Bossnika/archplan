@@ -13,7 +13,7 @@ import { useAuth } from './hooks/useAuth.jsx'
 import { COMPANY } from './lib/constants.js'
 import LoginPage from './pages/LoginPage.jsx'
 import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, listenApprovedUsers, createShareLink, getSharedProject, listenNotes, createNote, deleteNote, getOwnerEmail } from './lib/db.js'
-import { sendMentionEmail } from './lib/emailService.js'
+import { sendMentionEmail, sendAccessRequestEmail } from './lib/emailService.js'
 
 /* ─── THEME ─────────────────────────────────────────────────────────────────── */
 const DARK = {
@@ -1832,7 +1832,9 @@ export default function App(){
         setAccessStatus('approved')
       } else {
         // Auto-submit access request so owner is notified immediately
-        requestAccess(user.email, user.displayName||user.email.split('@')[0]).catch(()=>{})
+        const requesterName = user.displayName||user.email.split('@')[0]
+        requestAccess(user.email, requesterName).catch(()=>{})
+        sendAccessRequestEmail({ requesterName, requesterEmail: user.email })
         setAccessStatus('not_approved')
       }
     }).catch(err => {
