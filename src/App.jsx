@@ -1865,10 +1865,18 @@ export default function App(){
     })
   },[user])
 
+  const pendingCountRef = useRef(-1)
   useEffect(()=>{
     if(accessStatus !== 'approved' || !user) return
-    const unsub = listenPendingRequests(setPendingRequests)
-    return unsub
+    const unsub = listenPendingRequests((reqs)=>{
+      if(pendingCountRef.current >= 0 && reqs.length > pendingCountRef.current){
+        const newest = reqs[0]
+        showToast(`Cerere acces nouă: ${newest?.name||newest?.email||'utilizator nou'}`, '#0969da')
+      }
+      pendingCountRef.current = reqs.length
+      setPendingRequests(reqs)
+    })
+    return ()=>{ pendingCountRef.current=-1; unsub(); }
   },[accessStatus, user])
 
   useEffect(()=>{
@@ -1982,47 +1990,25 @@ export default function App(){
   const handleGenerateShare = async () => {
     if(!shareTargetProj || !user) return
     setShareLoading(true)
-    let finalToken = null
     try {
       const stripAttachments = (arr) => (arr||[]).map(x=>({...x,attachments:[]}))
-      const projectSnapshot = cleanForShare({
-        name: shareTargetProj.name,
-        client: shareTargetProj.client,
-        location: shareTargetProj.location,
-        startDate: shareTargetProj.startDate,
-        type: shareTargetProj.type,
-        clientNote: shareConfig.clientNote || '',
-        phases: shareConfig.faze ? stripAttachments(shareTargetProj.phases) : [],
-        avize: shareConfig.avize ? stripAttachments(shareTargetProj.avize) : [],
-      })
-      // Retry Firestore write up to 3 times
-      for(let attempt=0; attempt<3; attempt++){
-        try{ finalToken = await createShareLink(user.uid, shareTargetProj.id, shareConfig, projectSnapshot); break; }
-        catch(retryErr){ if(attempt===2) throw retryErr; await new Promise(r=>setTimeout(r,1000)); }
+      const data = {
+        n: shareTargetProj.name, c: shareTargetProj.client, l: shareTargetProj.location,
+        s: shareTargetProj.startDate, t: shareTargetProj.type,
+        note: shareConfig.clientNote||'',
+        ph: shareConfig.faze ? stripAttachments(cleanForShare(shareTargetProj.phases||[])) : [],
+        av: shareConfig.avize ? stripAttachments(cleanForShare(shareTargetProj.avize||[])) : [],
+        cfg: shareConfig,
       }
+      const token = 'b64_' + btoa(unescape(encodeURIComponent(JSON.stringify(data))))
+      setShareToken(token)
+      const url = `${window.location.origin}/?share=${token}`
+      navigator.clipboard.writeText(url).catch(()=>{})
+      showToast('Link copiat! ✓', T.green)
     } catch(e) {
-      console.error('Share link Firestore error (falling back to b64):', e)
-      try {
-        const data = {
-          n: shareTargetProj.name, c: shareTargetProj.client, l: shareTargetProj.location,
-          s: shareTargetProj.startDate, t: shareTargetProj.type,
-          note: shareConfig.clientNote||'',
-          ph: shareConfig.faze ? cleanForShare(shareTargetProj.phases||[]) : [],
-          av: shareConfig.avize ? cleanForShare(shareTargetProj.avize||[]) : [],
-          cfg: shareConfig,
-        }
-        finalToken = 'b64_' + btoa(unescape(encodeURIComponent(JSON.stringify(data))))
-      } catch(e2) {
-        showToast('Eroare la generarea linkului', T.red)
-        setShareLoading(false)
-        return
-      }
+      console.error('Share generation error:', e)
+      showToast('Eroare la generarea linkului', T.red)
     }
-    setShareToken(finalToken)
-    // Auto-copy to clipboard
-    const url = `${window.location.origin}/?share=${finalToken}`
-    navigator.clipboard.writeText(url).catch(()=>{})
-    showToast(finalToken.startsWith('b64_') ? 'Link copiat (mod offline)' : 'Link scurt copiat! ✓', T.green)
     setShareLoading(false)
   }
 
@@ -2679,15 +2665,13 @@ export default function App(){
               <>
                 <div style={{fontSize:11,color:T.green,fontWeight:600,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
                   <CheckCircle size={14}/>
-                  {shareToken.startsWith('b64_') ? 'Link generat (mod offline) — deja copiat:' : 'Link scurt generat — deja copiat în clipboard:'}
+                  Link generat și copiat în clipboard
                 </div>
                 <div style={{background:T.bg,border:`1px solid ${T.accent}55`,borderRadius:7,padding:'10px 12px',fontSize:11,color:T.accent,wordBreak:'break-all',marginBottom:6,userSelect:'all',cursor:'text'}}>
                   {window.location.origin}/?share={shareToken}
                 </div>
                 <div style={{fontSize:10,color:T.textDim,marginBottom:14}}>
-                  {shareToken.startsWith('b64_')
-                    ? '⚠ Link lung — Firestore indisponibil, dar funcționează fără server'
-                    : '✓ Link scurt via Firestore (recomandat)'}
+                  Trimite acest link clientului. Nu necesită cont sau autentificare.
                 </div>
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end',flexWrap:'wrap'}}>
                   <button onClick={()=>window.open(`${window.location.origin}/?share=${shareToken}`,'_blank')}
