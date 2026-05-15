@@ -119,6 +119,63 @@ const pctOf = phases=>phases.length?Math.round(phases.filter(p=>p.status==="appr
 
 const avatarColor = (str="")=>AVATAR_COLORS[str.split("").reduce((a,c)=>a+c.charCodeAt(0),0)%AVATAR_COLORS.length];
 
+/* ─── PHASE CHAIN + CASCADE ──────────────────────────────────────────────────── */
+const PHASE_CHAIN=[
+  {phaseId:'ph_cu_doc', dur:14},
+  {phaseId:'ph_cu_dep', dur:3},
+  {phaseId:'ph_cu_emit',dur:30},
+  {phaseId:'ph_av_doc', dur:21},
+  {phaseId:'ph_av_dep', dur:7},
+  {phaseId:'ph_av_obt', dur:45},
+  {phaseId:'ph_pt_doc', dur:30},
+  {phaseId:'ph_pt_ver', dur:14},
+  {phaseId:'ph_ac_dep', dur:5},
+  {phaseId:'ph_ac_emit',dur:30},
+];
+
+const addDays=(dateStr,n)=>{
+  const d=new Date(dateStr);
+  d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+};
+
+// Cascade startDate/endDate forward from fromPhId through the chain.
+// avize-driven phases (ph_av_dep, ph_av_obt) are overridden by real avize dates when present.
+const cascadeForward=(phases,fromPhId,fromEndDate,avize=[])=>{
+  const chainIdx=PHASE_CHAIN.findIndex(p=>p.phaseId===fromPhId);
+  if(chainIdx<0||chainIdx>=PHASE_CHAIN.length-1||!fromEndDate) return phases;
+
+  const subs=avize.filter(av=>av.submissionDate).map(av=>av.submissionDate).sort();
+  const emOrEst=avize.filter(av=>av.emissionDate||av.estimatedDate)
+                     .map(av=>av.emissionDate||av.estimatedDate).sort();
+
+  let prevEnd=fromEndDate;
+  const result=[...phases];
+
+  for(let i=chainIdx+1;i<PHASE_CHAIN.length;i++){
+    const {phaseId,dur}=PHASE_CHAIN[i];
+    const idx=result.findIndex(p=>p.phaseId===phaseId);
+    if(idx<0) continue;
+
+    if(phaseId==='ph_av_dep'&&subs.length>0){
+      result[idx]={...result[idx],startDate:subs[0],endDate:subs[subs.length-1]};
+      prevEnd=subs[subs.length-1];
+      continue;
+    }
+    if(phaseId==='ph_av_obt'&&emOrEst.length>0){
+      const allDone=avize.every(av=>av.emissionDate||av.status==='approved');
+      result[idx]={...result[idx],startDate:emOrEst[0],endDate:emOrEst[emOrEst.length-1],...(allDone?{status:'approved'}:{})};
+      prevEnd=emOrEst[emOrEst.length-1];
+      continue;
+    }
+
+    const newEnd=addDays(prevEnd,dur);
+    result[idx]={...result[idx],startDate:prevEnd,endDate:newEnd};
+    prevEnd=newEnd;
+  }
+  return result;
+};
+
 /* ─── DEMO PROJECTS ──────────────────────────────────────────────────────────── */
 const mkPhases=(start,statuses)=>{
   const tpl=[
@@ -137,7 +194,7 @@ const mkPhases=(start,statuses)=>{
   return tpl.map((t,i)=>{
     const s=cur.toISOString().slice(0,10);
     cur=new Date(cur.getTime()+t.dur*86400000);
-    return{...t,phaseId:`ph_${t.id}`,status:statuses[i]||"pending",startDate:s,endDate:cur.toISOString().slice(0,10),attachments:[]};
+    return{...t,phaseId:`ph_${t.id}`,status:statuses[i]||"pending",startDate:s,endDate:cur.toISOString().slice(0,10),attachments:[],dependsOn:i>0?`ph_${tpl[i-1].id}`:null};
   });
 };
 const mkAvize=(start,sts={})=>INST.map(inst=>({
@@ -1608,7 +1665,8 @@ export default function App(){
   const updPhase=(projId,phId,data)=>{
     const proj=projects.find(p=>p.id===projId);
     if(!proj||!user) return;
-    const newPhases=(proj.phases||[]).map(ph=>ph.phaseId!==phId?ph:{...ph,...data});
+    let newPhases=(proj.phases||[]).map(ph=>ph.phaseId!==phId?ph:{...ph,...data});
+    if(data.endDate) newPhases=cascadeForward(newPhases,phId,data.endDate,proj.avize||[]);
     setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,phases:newPhases}));
     updateProject(user.uid,projId,{phases:newPhases}).catch(e=>{
       console.error('updPhase write failed:',e);
@@ -1619,46 +1677,10 @@ export default function App(){
     const proj=projects.find(p=>p.id===projId);
     if(!proj||!user) return;
     const newAvize=(proj.avize||[]).map(av=>av.avizId!==avId?av:{...av,...data});
-
-    // ── Cascade: sync phase dates from avize ─────────────────────────────
-    let newPhases=[...(proj.phases||[])];
-
-    // submissionDate on any aviz → fill ph_av_dep.startDate if empty
-    const allSubs=newAvize.filter(av=>av.submissionDate).map(av=>av.submissionDate);
-    if(allSubs.length>0){
-      const minSub=[...allSubs].sort()[0];
-      newPhases=newPhases.map(ph=>ph.phaseId==='ph_av_dep'&&!ph.startDate?{...ph,startDate:minSub}:ph);
-    }
-
-    // emissionDate / status=approved → recalc ph_av_obt endDate and ph_ac_dep startDate
-    const allEmissions=newAvize.filter(av=>av.emissionDate).map(av=>av.emissionDate);
-    if(allEmissions.length>0){
-      const maxEm=[...allEmissions].sort().slice(-1)[0];
-      const allDone=newAvize.every(av=>av.emissionDate||av.status==='approved');
-      newPhases=newPhases.map(ph=>{
-        if(ph.phaseId==='ph_av_obt'){
-          const upd={endDate:maxEm};
-          if(allDone) upd.status='approved';
-          return{...ph,...upd};
-        }
-        if(ph.phaseId==='ph_ac_dep'){
-          // startDate = day after last aviz emission; endDate = startDate + 5 days
-          const d=new Date(maxEm);d.setDate(d.getDate()+1);
-          const newStart=d.toISOString().slice(0,10);
-          const e=new Date(d);e.setDate(e.getDate()+5);
-          return{...ph,startDate:newStart,endDate:e.toISOString().slice(0,10)};
-        }
-        if(ph.phaseId==='ph_ac_emit'){
-          // startDate = ac_dep start + 6 days; endDate = startDate + 30 days
-          const d=new Date(maxEm);d.setDate(d.getDate()+7);
-          const newStart=d.toISOString().slice(0,10);
-          const e=new Date(d);e.setDate(e.getDate()+30);
-          return{...ph,startDate:newStart,endDate:e.toISOString().slice(0,10)};
-        }
-        return ph;
-      });
-    }
-
+    const avDocEnd=(proj.phases||[]).find(p=>p.phaseId==='ph_av_doc')?.endDate;
+    const newPhases=avDocEnd
+      ?cascadeForward(proj.phases||[],'ph_av_doc',avDocEnd,newAvize)
+      :[...(proj.phases||[])];
     setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,avize:newAvize,phases:newPhases}));
     updateProject(user.uid,projId,{avize:newAvize,phases:newPhases}).catch(e=>{
       console.error('updAviz write failed:',e);
