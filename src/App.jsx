@@ -1533,7 +1533,11 @@ export default function App(){
 
   useEffect(()=>{
     if(!user) return;
-    const unsub=listenProjects(user.uid, setProjects);
+    const unsub=listenProjects(
+      user.uid,
+      setProjects,
+      (err)=>showToast(`Firestore: ${err.code} — ${err.message}`, T.red)
+    );
     return unsub;
   },[user]);
 
@@ -2306,6 +2310,7 @@ export default function App(){
             </span>
           </div>
           <div style={{height:10,width:1,background:T.border}}/>
+          <span style={{fontSize:10,color:T.textDim,fontFamily:'monospace'}}>v{__BUILD_DATE__}</span>
           <a href="https://www.studiokolectiv.ro" target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blue,textDecoration:"none",fontWeight:500}}>studiokolectiv.ro</a>
           <span style={{fontSize:10,color:T.textDim}}>© 2025 ArchPlan</span>
         </div>

@@ -8,9 +8,15 @@ import { db } from './firebase.js'
 // ── PROJECTS ─────────────────────────────────────────────────────────────────
 export const projectsCol = (uid) => collection(db, 'users', uid, 'projects')
 
-export const listenProjects = (uid, cb) =>
-  onSnapshot(query(projectsCol(uid), orderBy('createdAt', 'desc')), snap =>
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+export const listenProjects = (uid, cb, onErr) =>
+  onSnapshot(
+    collection(db, 'users', uid, 'projects'),  // no orderBy — avoids index requirement
+    snap => cb(snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0))
+    ),
+    err => { console.error('listenProjects:', err.code, err.message); onErr?.(err); }
+  )
 
 export const createProject = (uid, data) =>
   addDoc(projectsCol(uid), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
@@ -25,8 +31,11 @@ export const deleteProject = (uid, projectId) =>
 export const notesCol = (uid) => collection(db, 'users', uid, 'notes')
 
 export const listenNotes = (uid, cb) =>
-  onSnapshot(query(notesCol(uid), orderBy('date', 'asc')), snap =>
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  onSnapshot(
+    collection(db, 'users', uid, 'notes'),
+    snap => cb(snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.date||'').localeCompare(b.date||''))),
+    err => console.error('listenNotes:', err.code)
+  )
 
 export const createNote = (uid, data) =>
   addDoc(notesCol(uid), { ...data, createdAt: serverTimestamp() })
@@ -38,8 +47,11 @@ export const deleteNote = (uid, noteId) =>
 export const remindersCol = (uid) => collection(db, 'users', uid, 'reminders')
 
 export const listenReminders = (uid, cb) =>
-  onSnapshot(query(remindersCol(uid), orderBy('date', 'asc')), snap =>
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  onSnapshot(
+    collection(db, 'users', uid, 'reminders'),
+    snap => cb(snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.date||'').localeCompare(b.date||''))),
+    err => console.error('listenReminders:', err.code)
+  )
 
 export const createReminder = (uid, data) =>
   addDoc(remindersCol(uid), { ...data, createdAt: serverTimestamp() })
