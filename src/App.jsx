@@ -1553,6 +1553,17 @@ export default function App(){
     if(tab==='chat'&&selId) setChatSeenProjects(s=>new Set([...s,selId]))
   },[tab,selId])
 
+  // Track Firestore online/offline state
+  const [fsOnline, setFsOnline] = useState(true)
+  useEffect(()=>{
+    const onOnline=()=>setFsOnline(true);
+    const onOffline=()=>setFsOnline(false);
+    window.addEventListener('online',onOnline);
+    window.addEventListener('offline',onOffline);
+    setFsOnline(navigator.onLine);
+    return()=>{window.removeEventListener('online',onOnline);window.removeEventListener('offline',onOffline);};
+  },[])
+
   useEffect(()=>{
     if(!user) { setAccessStatus('checking'); return; }
     checkAccess(user.email).then(async status => {
@@ -1595,7 +1606,10 @@ export default function App(){
     if(!proj||!user) return;
     const newPhases=(proj.phases||[]).map(ph=>ph.phaseId!==phId?ph:{...ph,...data});
     setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,phases:newPhases}));
-    updateProject(user.uid,projId,{phases:newPhases});
+    updateProject(user.uid,projId,{phases:newPhases}).catch(e=>{
+      console.error('updPhase write failed:',e);
+      showToast('Eroare salvare faze — verifică conexiunea',T.red);
+    });
   };
   const updAviz=(projId,avId,data)=>{
     const proj=projects.find(p=>p.id===projId);
@@ -1635,7 +1649,10 @@ export default function App(){
     }
 
     setProjects(ps=>ps.map(p=>p.id!==projId?p:{...p,avize:newAvize,phases:newPhases}));
-    updateProject(user.uid,projId,{avize:newAvize,phases:newPhases});
+    updateProject(user.uid,projId,{avize:newAvize,phases:newPhases}).catch(e=>{
+      console.error('updAviz write failed:',e);
+      showToast('Eroare salvare avize — verifică conexiunea',T.red);
+    });
   };
 
   const handleNewProject=async()=>{
@@ -2266,8 +2283,15 @@ export default function App(){
         <div style={{height:12,width:1,background:T.border}}/>
         <span style={{fontSize:10,color:T.textDim}}>Arhitectură · Urbanism · Design</span>
         <div style={{marginLeft:"auto",display:"flex",gap:14,alignItems:"center"}}>
+          {/* Firestore sync indicator */}
+          <div style={{display:'flex',alignItems:'center',gap:4}}>
+            <div style={{width:6,height:6,borderRadius:'50%',background:fsOnline?T.green:T.red,flexShrink:0}}/>
+            <span style={{fontSize:10,color:fsOnline?T.green:T.red,fontWeight:600}}>
+              {fsOnline?'Sincronizat':'Offline'}
+            </span>
+          </div>
+          <div style={{height:10,width:1,background:T.border}}/>
           <a href="https://www.studiokolectiv.ro" target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blue,textDecoration:"none",fontWeight:500}}>studiokolectiv.ro</a>
-          <span style={{fontSize:10,color:T.textDim}}>office@studiokolectiv.ro</span>
           <span style={{fontSize:10,color:T.textDim}}>© 2025 ArchPlan</span>
         </div>
       </footer>
