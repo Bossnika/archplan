@@ -1049,7 +1049,7 @@ const AvizeView=({project,onUpdate,T,autoOpenAviz})=>{
         const isOpen=open===av.avizId;
         const isApproved=av.status==='approved'||av.status==='picked_up';
         return(
-          <div key={av.avizId} style={{border:`1px solid ${isApproved?T.green+'44':isOpen?inst.color+'44':T.border}`,borderRadius:10,overflow:"hidden",background:T.panel,transition:"border-color .2s"}}>
+          <div key={av.avizId} style={{border:`1px solid ${isApproved?T.green+'44':isOpen?inst.color+'44':T.border}`,borderRadius:10,background:T.panel,transition:"border-color .2s"}}>
             <div onClick={()=>setOpen(isOpen?null:av.avizId)}
               style={{display:"grid",gridTemplateColumns:"36px 1fr 120px 90px 150px 28px",gap:8,alignItems:"center",padding:"11px 16px",cursor:"pointer"}}
               onMouseEnter={e=>e.currentTarget.style.background=T.panelHov}
@@ -1083,7 +1083,7 @@ const AvizeView=({project,onUpdate,T,autoOpenAviz})=>{
                 </button>
                 {statusMenu===av.avizId&&(
                   <div onClick={e=>e.stopPropagation()} style={{
-                    position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:50,
+                    position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:9999,
                     background:T.panel,border:`1px solid ${T.borderLt}`,borderRadius:8,
                     boxShadow:T.shadowLg,minWidth:170,overflow:'hidden',
                   }}>
@@ -1458,7 +1458,8 @@ const AvizeDashboard = ({projects, T, onNavigate}) => {
   )
 
   const filtered = allAvize.filter(av=>{
-    if(statusF!=='all' && av.status!==statusF) return false
+    if(statusF==='wip' && (av.status==='approved'||av.status==='picked_up')) return false
+    else if(statusF!=='all' && statusF!=='wip' && av.status!==statusF) return false
     if(validityF!=='all') {
       const dl = av.expiryDate ? Math.round((new Date(av.expiryDate)-new Date())/86400000) : null
       if(validityF==='expiring' && !(dl!==null&&dl>=0&&dl<=30)) return false
@@ -1496,11 +1497,9 @@ const AvizeDashboard = ({projects, T, onNavigate}) => {
           <select value={statusF} onChange={e=>setStatusF(e.target.value)}
             style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:6,padding:'4px 10px',color:T.textMd,fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
             <option value="all">Toate statusurile</option>
-            <option value="pending">De obținut</option>
-            <option value="in_progress">În lucru</option>
-            <option value="submitted">Depus</option>
+            <option value="wip">WIP (neconfirmate)</option>
             <option value="approved">Obținut</option>
-            <option value="rejected">Respins</option>
+            <option value="picked_up">Ridicat</option>
           </select>
           {/* Validity filter */}
           <select value={validityF} onChange={e=>setValidityF(e.target.value)}
@@ -1560,12 +1559,12 @@ const AvizeDashboard = ({projects, T, onNavigate}) => {
         <div style={{fontSize:12,color:T.textDim,textAlign:'center',padding:'30px 0'}}>Niciun aviz corespunde filtrelor selectate</div>
       )}
       {filtered.length>0&&(()=>{
-        const sm={pending:{l:'WIP',c:'#484f58'},in_progress:{l:'În lucru',c:'#d29922'},submitted:{l:'Depus',c:'#58a6ff'},approved:{l:'Obținut',c:'#3fb950'},rejected:{l:'Respins',c:'#f85149'}}
+        const sm={approved:{l:'Obținut',c:'#3fb950'},picked_up:{l:'Ridicat',c:'#bc8cff'}}
         const renderCard=(av,idx,hideProj=false)=>{
           const inst=INST.find(x=>x.id===av.instId)
           const dl=av.expiryDate?Math.round((new Date(av.expiryDate)-new Date())/86400000):null
           const estDl=av.estimatedDate?Math.round((new Date(av.estimatedDate)-new Date())/86400000):null
-          const s=sm[av.status]||sm.pending
+          const s=sm[av.status]||{l:'WIP',c:'#484f58'}
           const tc=PROJECT_TYPES.find(pt=>pt.id===av.projType)?.color||'#58a6ff'
           return (
             <div key={`${av.projId}-${av.instId}-${idx}`} onClick={()=>onNavigate(av.projId,'avize',av.avizId)}
@@ -1884,6 +1883,7 @@ export default function App(){
     setShareLoading(true)
     let finalToken = null
     try {
+      const stripAttachments = (arr) => (arr||[]).map(x=>({...x,attachments:[]}))
       const projectSnapshot = cleanForShare({
         name: shareTargetProj.name,
         client: shareTargetProj.client,
@@ -1891,10 +1891,14 @@ export default function App(){
         startDate: shareTargetProj.startDate,
         type: shareTargetProj.type,
         clientNote: shareConfig.clientNote || '',
-        phases: shareConfig.faze ? (shareTargetProj.phases||[]) : [],
-        avize: shareConfig.avize ? (shareTargetProj.avize||[]) : [],
+        phases: shareConfig.faze ? stripAttachments(shareTargetProj.phases) : [],
+        avize: shareConfig.avize ? stripAttachments(shareTargetProj.avize) : [],
       })
-      finalToken = await createShareLink(user.uid, shareTargetProj.id, shareConfig, projectSnapshot)
+      // Retry Firestore write up to 3 times
+      for(let attempt=0; attempt<3; attempt++){
+        try{ finalToken = await createShareLink(user.uid, shareTargetProj.id, shareConfig, projectSnapshot); break; }
+        catch(retryErr){ if(attempt===2) throw retryErr; await new Promise(r=>setTimeout(r,1000)); }
+      }
     } catch(e) {
       console.error('Share link Firestore error (falling back to b64):', e)
       try {
@@ -2094,6 +2098,7 @@ export default function App(){
                   <div>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>{CURRENT_USER.name}</div>
                     <div style={{fontSize:11,color:T.textDim,marginTop:2}}>{CURRENT_USER.email}</div>
+                    <div style={{fontSize:9,color:T.textDim,marginTop:1,fontFamily:'monospace'}}>uid: {user.uid.slice(-8)}</div>
                     <div style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:5,background:`${T.green}18`,border:`1px solid ${T.green}30`,borderRadius:4,padding:"1px 7px"}}>
                       <div style={{width:5,height:5,borderRadius:"50%",background:T.green}}/>
                       <span style={{fontSize:10,fontWeight:600,color:T.green}}>Owner · Activ</span>

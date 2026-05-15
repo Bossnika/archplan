@@ -18,9 +18,10 @@ export const auth = getAuth(app)
 
 // persistentLocalCache: loads instantly from IndexedDB on refresh, then syncs from server.
 // persistentSingleTabManager: works on iOS (no SharedWorker), single tab owns the cache.
-// Fixes 30-second cold-start and makes cross-device sync reliable.
+// experimentalForceLongPolling: forces HTTP long-polling instead of WebSocket, avoids
+// the 20–30 second WebSocket timeout on mobile/restrictive networks.
 export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: true,
   localCache: persistentLocalCache({
     tabManager: persistentSingleTabManager()
   }),
