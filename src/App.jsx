@@ -12,7 +12,7 @@ import {
 import { useAuth } from './hooks/useAuth.jsx'
 import { COMPANY } from './lib/constants.js'
 import LoginPage from './pages/LoginPage.jsx'
-import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, listenApprovedUsers, createShareLink, getSharedProject, listenNotes, createNote, deleteNote, getOwnerEmail } from './lib/db.js'
+import { listenProjects, updateProject, createProject, listenMessages, sendMessage as dbSendMsg, deleteMessage as dbDeleteMsg, deleteProject, checkAccess, initAccessControl, requestAccess, approveAccess, rejectAccess, listenPendingRequests, getSharedProject, listenNotes, createNote, deleteNote } from './lib/db.js'
 import { sendMentionEmail, sendAccessRequestEmail } from './lib/emailService.js'
 import { forceFirestoreSync } from './lib/firebase.js'
 
@@ -1712,7 +1712,7 @@ const AvizeDashboard = ({projects, T, onNavigate}) => {
 /* ─── MAIN APP ───────────────────────────────────────────────────────────────── */
 export default function App(){
   const { user, loading, logout } = useAuth();
-  const [accessStatus, setAccessStatus] = useState('approved')
+  const [accessStatus, setAccessStatus] = useState('checking')
   const [pendingRequests, setPendingRequests] = useState([])
   const [showRequests, setShowRequests] = useState(false)
   const [themeMode,setThemeMode]=useState("auto");
@@ -2002,7 +2002,7 @@ export default function App(){
       }
       const token = 'b64_' + btoa(unescape(encodeURIComponent(JSON.stringify(data))))
       setShareToken(token)
-      const url = `${window.location.origin}/?share=${token}`
+      const url = `${window.location.origin}/?share=${encodeURIComponent(token)}`
       navigator.clipboard.writeText(url).catch(()=>{})
       showToast('Link copiat! ✓', T.green)
     } catch(e) {
@@ -2041,6 +2041,12 @@ export default function App(){
   );
 
   if(!user) return <LoginPage T={T} />;
+
+  if(accessStatus === 'checking') return(
+    <div style={{minHeight:"100vh",background:DARK.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:DARK.textDim,fontSize:13}}>Se verifică accesul…</div>
+    </div>
+  );
 
   if(accessStatus === 'not_approved') return (
     <div style={{minHeight:'100vh',background:DARK.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,padding:24}}>
@@ -2674,11 +2680,11 @@ export default function App(){
                   Trimite acest link clientului. Nu necesită cont sau autentificare.
                 </div>
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end',flexWrap:'wrap'}}>
-                  <button onClick={()=>window.open(`${window.location.origin}/?share=${shareToken}`,'_blank')}
+                  <button onClick={()=>window.open(`${window.location.origin}/?share=${encodeURIComponent(shareToken)}`,'_blank')}
                     style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:7,padding:'7px 12px',color:T.textMd,cursor:'pointer',fontSize:12,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
                     <ExternalLink size={11}/>Testează
                   </button>
-                  <button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/?share=${shareToken}`);showToast('Link copiat din nou!',T.green);}}
+                  <button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/?share=${encodeURIComponent(shareToken)}`);showToast('Link copiat din nou!',T.green);}}
                     style={{background:T.accentBg,border:`1px solid ${T.accent}44`,borderRadius:7,padding:'7px 14px',color:T.accent,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600}}>
                     Copiază din nou
                   </button>
