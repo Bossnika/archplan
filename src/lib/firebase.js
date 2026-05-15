@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
-import { initializeFirestore, memoryLocalCache, enableNetwork, disableNetwork } from 'firebase/firestore'
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, enableNetwork, disableNetwork } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
@@ -16,14 +16,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 
-// memoryLocalCache: no IndexedDB — every read/write goes directly to Firestore server.
-// Guarantees cross-device consistency: changes appear on all devices as soon as they
-// reach the server, with no stale cache masking updates.
-// experimentalForceLongPolling: HTTP long-polling instead of WebSocket, avoids the
-// 20–30 second WebSocket timeout on mobile/restrictive networks.
+// persistentLocalCache: renders instantly from IndexedDB on every load, then syncs
+// from server in the background. Cross-device sync is handled by the visibility-change
+// reconnect in App.jsx (forceFirestoreSync), which forces a fresh server connection
+// whenever the tab returns to foreground.
+// persistentSingleTabManager: works on iOS (no SharedWorker/BroadcastChannel needed).
+// experimentalForceLongPolling: HTTP long-polling avoids 20-30s WebSocket timeout on
+// mobile networks.
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
-  localCache: memoryLocalCache(),
+  localCache: persistentLocalCache({
+    tabManager: persistentSingleTabManager(),
+  }),
 })
 
 export const storage = getStorage(app)

@@ -1,6 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import {
   Bell, Plus, Search, ChevronRight, AlertTriangle, CheckCircle, Clock,
   Circle, FileText, AlertCircle, Layers, Building2, BarChart2, User,
@@ -2536,6 +2534,10 @@ export default function App(){
                       if(!ganttRef.current) return
                       showToast('Se generează PDF…', T.textMd)
                       try {
+                        const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+                          import('html2canvas'),
+                          import('jspdf'),
+                        ])
                         const canvas = await html2canvas(ganttRef.current, {
                           backgroundColor: T===DARK?'#161b22':'#ffffff',
                           scale: 2,
